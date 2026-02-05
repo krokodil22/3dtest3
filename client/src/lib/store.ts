@@ -20,6 +20,10 @@ interface EditorState {
   elements: Record<string, SceneElement>;
   selection: string[]; // IDs of selected elements
   transformMode: TransformMode;
+  history: Array<{
+    elements: Record<string, SceneElement>;
+    selection: string[];
+  }>;
   
   // Actions
   addElement: (type: ElementType) => void;
@@ -33,6 +37,7 @@ interface EditorState {
   subtractSelection: () => void;
   loadScene: (elements: Record<string, SceneElement>) => void;
   resetScene: () => void;
+  undo: () => void;
 }
 
 const DEFAULT_ELEMENT_PROPS = {
@@ -42,10 +47,32 @@ const DEFAULT_ELEMENT_PROPS = {
   color: '#3b82f6',
 };
 
+const MAX_HISTORY = 50;
+
+const cloneElements = (elements: Record<string, SceneElement>) =>
+  Object.fromEntries(
+    Object.entries(elements).map(([id, element]) => [
+      id,
+      {
+        ...element,
+        position: [...element.position] as [number, number, number],
+        rotation: [...element.rotation] as [number, number, number],
+        scale: [...element.scale] as [number, number, number],
+        children: element.children ? [...element.children] : undefined,
+      },
+    ])
+  );
+
+const pushHistory = (state: EditorState) =>
+  [...state.history, { elements: cloneElements(state.elements), selection: [...state.selection] }].slice(
+    -MAX_HISTORY
+  );
+
 export const useEditorStore = create<EditorState>((set, get) => ({
   elements: {},
   selection: [],
   transformMode: 'translate',
+  history: [],
 
   addElement: (type) => {
     const id = uuidv4();
@@ -59,6 +86,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     };
 
     set((state) => ({
+      history: pushHistory(state),
       elements: { ...state.elements, [id]: newElement },
       selection: [id], // Auto-select new item
     }));
@@ -66,6 +94,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   updateElement: (id, updates) => {
     set((state) => ({
+      history: pushHistory(state),
       elements: {
         ...state.elements,
         [id]: { ...state.elements[id], ...updates },
@@ -78,6 +107,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       const newElements = { ...state.elements };
       ids.forEach((id) => delete newElements[id]);
       return {
+        history: pushHistory(state),
         elements: newElements,
         selection: state.selection.filter((selId) => !ids.includes(selId)),
       };
@@ -118,6 +148,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       });
       
       return {
+        history: pushHistory(state),
         elements: { ...updatedElements, [groupId]: group },
         selection: [groupId],
       };
@@ -128,7 +159,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     // Simplified ungroup logic
     const state = get();
     const selectedIds = state.selection;
-    
+
     set((state) => {
       const updatedElements = { ...state.elements };
       const newSelection: string[] = [];
@@ -150,6 +181,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       });
 
       return {
+        history: pushHistory(state),
         elements: updatedElements,
         selection: newSelection,
       };
@@ -184,13 +216,25 @@ export const useEditorStore = create<EditorState>((set, get) => ({
        });
        
        return {
+         history: pushHistory(state),
          elements: { ...updatedElements, [csgId]: csgElement },
          selection: [csgId],
        };
     });
   },
 
-  loadScene: (elements) => set({ elements, selection: [] }),
+  loadScene: (elements) => set({ elements, selection: [], history: [] }),
   
-  resetScene: () => set({ elements: {}, selection: [] }),
+  resetScene: () => set({ elements: {}, selection: [], history: [] }),
+
+  undo: () =>
+    set((state) => {
+      if (state.history.length === 0) return state;
+      const previous = state.history[state.history.length - 1];
+      return {
+        elements: previous.elements,
+        selection: previous.selection,
+        history: state.history.slice(0, -1),
+      };
+    }),
 }));

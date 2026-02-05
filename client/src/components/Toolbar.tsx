@@ -1,6 +1,6 @@
 import { 
   Box, Circle, Cylinder, Combine, 
-  Group, Ungroup, MousePointer2, Move, RotateCw, Maximize
+  Group, Ungroup, MousePointer2, Move, RotateCw, Maximize, Undo2
 } from 'lucide-react';
 import { useEditorStore } from '@/lib/store';
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,8 @@ export function Toolbar() {
   const groupSelection = useEditorStore(state => state.groupSelection);
   const ungroupSelection = useEditorStore(state => state.ungroupSelection);
   const subtractSelection = useEditorStore(state => state.subtractSelection);
+  const undo = useEditorStore(state => state.undo);
+  const canUndo = useEditorStore(state => state.history.length > 0);
   const selection = useEditorStore(state => state.selection);
   const transformMode = useEditorStore(state => state.transformMode);
   const setTransformMode = useEditorStore(state => state.setTransformMode);
@@ -77,6 +79,25 @@ export function Toolbar() {
               <TooltipContent>{tool.label}</TooltipContent>
             </Tooltip>
           ))}
+        </div>
+
+        <Separator orientation="vertical" className="h-8 mx-2" />
+
+        <div className="flex items-center gap-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={undo}
+                disabled={!canUndo}
+                className="hover:bg-accent hover:text-accent-foreground"
+              >
+                <Undo2 className="w-5 h-5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Undo (Ctrl+Z)</TooltipContent>
+          </Tooltip>
         </div>
 
         <Separator orientation="vertical" className="h-8 mx-2" />

@@ -3,9 +3,33 @@ import { Viewport } from '@/components/Viewport';
 import { Sidebar } from '@/components/Sidebar';
 import { ProjectManager } from '@/components/ProjectManager';
 import { Loader2 } from 'lucide-react';
-import { Suspense } from 'react';
+import { Suspense, useEffect } from 'react';
+import { useEditorStore } from '@/lib/store';
 
 export default function Editor() {
+  const undo = useEditorStore(state => state.undo);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const isEditableTarget =
+        target?.tagName === 'INPUT' ||
+        target?.tagName === 'TEXTAREA' ||
+        target?.isContentEditable;
+
+      if (isEditableTarget) return;
+
+      const isUndo = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z';
+      if (isUndo && !event.shiftKey) {
+        event.preventDefault();
+        undo();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [undo]);
+
   return (
     <div className="h-screen w-screen flex flex-col bg-background text-foreground overflow-hidden">
       <Toolbar />
