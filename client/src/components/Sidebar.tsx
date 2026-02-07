@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useEditorStore } from '@/lib/store';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
@@ -36,12 +37,14 @@ export function Sidebar() {
   const setSelection = useEditorStore(state => state.setSelection);
   const updateElement = useEditorStore(state => state.updateElement);
   const removeElements = useEditorStore(state => state.removeElements);
+  const reorderElements = useEditorStore(state => state.reorderElements);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
 
   const selectedId = selection.length === 1 ? selection[0] : null;
   const selectedElement = selectedId ? elements[selectedId] : null;
 
   // Flattened list for simplicity in Scene Graph
-  const elementList = Object.values(elements);
+  const elementList = Object.values(elements).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
   return (
     <div className="w-80 border-l bg-card flex flex-col shrink-0">
@@ -64,9 +67,29 @@ export function Sidebar() {
                 key={el.id}
                 className={cn(
                   "flex items-center gap-2 px-3 py-2 rounded-md text-sm cursor-pointer transition-colors hover:bg-muted/50",
-                  selection.includes(el.id) && "bg-primary/10 text-primary font-medium"
+                  selection.includes(el.id) && "bg-primary/10 text-primary font-medium",
+                  draggingId === el.id && "opacity-50"
                 )}
                 onClick={() => setSelection([el.id])}
+                draggable
+                onDragStart={(event) => {
+                  event.dataTransfer.setData('text/plain', el.id);
+                  event.dataTransfer.effectAllowed = 'move';
+                  setDraggingId(el.id);
+                }}
+                onDragEnd={() => setDraggingId(null)}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = 'move';
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const activeId = event.dataTransfer.getData('text/plain');
+                  if (activeId) {
+                    reorderElements(activeId, el.id);
+                  }
+                  setDraggingId(null);
+                }}
               >
                 <Cuboid className="w-3.5 h-3.5 opacity-70" />
                 <span className="truncate flex-1">{el.name}</span>

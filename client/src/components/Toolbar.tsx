@@ -15,12 +15,17 @@ export function Toolbar() {
   const undo = useEditorStore(state => state.undo);
   const canUndo = useEditorStore(state => state.history.length > 0);
   const selection = useEditorStore(state => state.selection);
+  const elements = useEditorStore(state => state.elements);
   const transformMode = useEditorStore(state => state.transformMode);
   const setTransformMode = useEditorStore(state => state.setTransformMode);
 
   const canGroup = selection.length > 1;
   const canUngroup = selection.length > 0; // Simple check
-  const canSubtract = selection.length === 2;
+  const canSubtract =
+    selection.length === 2 &&
+    selection.every((id) =>
+      ['box', 'sphere', 'cylinder', 'torus'].includes(elements[id]?.type)
+    );
 
   const transformTools = [
     { mode: 'translate', icon: Move, label: 'Move (G)' },
@@ -60,7 +65,7 @@ export function Toolbar() {
     <div className="h-16 border-b bg-card flex items-center px-4 justify-between shrink-0 z-10 shadow-sm">
       <div className="flex items-center space-x-2">
         <div className="font-bold text-xl mr-6 bg-gradient-to-r from-primary to-blue-400 bg-clip-text text-transparent">
-          VoxelForge
+          Tetrika 3D
         </div>
         
         <div className="flex items-center gap-1">

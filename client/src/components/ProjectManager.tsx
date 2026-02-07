@@ -1,13 +1,15 @@
-import { useState } from 'react';
+import type { ChangeEvent } from 'react';
+import { useRef, useState } from 'react';
 import { useProjects, useCreateProject, useUpdateProject } from '@/hooks/use-projects';
 import { useEditorStore } from '@/lib/store';
-import { 
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger 
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { FolderOpen, Save, Loader2, Plus } from 'lucide-react';
+import { Download, FolderOpen, Loader2, Plus, Save, Upload } from 'lucide-react';
+import * as THREE from 'three';
+import { OBJExporter } from 'three/examples/jsm/exporters/OBJExporter.js';
+import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 
 export function ProjectManager() {
   const [isOpen, setIsOpen] = useState(false);
@@ -21,6 +23,68 @@ export function ProjectManager() {
   const elements = useEditorStore(state => state.elements);
   const loadScene = useEditorStore(state => state.loadScene);
   const resetScene = useEditorStore(state => state.resetScene);
+  const addObjElement = useEditorStore(state => state.addObjElement);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const buildExportScene = () => {
+    const scene = new THREE.Scene();
+    const elementObjects = new Map<string, THREE.Object3D>();
+
+    Object.values(elements).forEach((element) => {
+      let object: THREE.Object3D;
+      const material = new THREE.MeshStandardMaterial({
+        color: element.color,
+        roughness: 0.3,
+        metalness: 0.2,
+      });
+
+      switch (element.type) {
+        case 'box':
+          object = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material);
+          break;
+        case 'sphere':
+          object = new THREE.Mesh(new THREE.SphereGeometry(0.5, 32, 32), material);
+          break;
+        case 'cylinder':
+          object = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 1, 32), material);
+          break;
+        case 'torus':
+          object = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.2, 16, 100), material);
+          break;
+        case 'mesh': {
+          if (!element.objData) return;
+          const loader = new OBJLoader();
+          object = loader.parse(element.objData);
+          object.traverse((child) => {
+            if ((child as THREE.Mesh).isMesh) {
+              const mesh = child as THREE.Mesh;
+              mesh.material = material;
+            }
+          });
+          break;
+        }
+        default:
+          object = new THREE.Object3D();
+      }
+
+      object.name = element.name;
+      object.position.set(...element.position);
+      object.rotation.set(...element.rotation);
+      object.scale.set(...element.scale);
+      elementObjects.set(element.id, object);
+    });
+
+    elementObjects.forEach((object, id) => {
+      const element = elements[id];
+      if (element?.parentId && elementObjects.has(element.parentId)) {
+        elementObjects.get(element.parentId)?.add(object);
+      } else {
+        scene.add(object);
+      }
+    });
+
+    return scene;
+  };
 
   const handleCreate = async () => {
     if (!newProjectName.trim()) return;
@@ -55,6 +119,33 @@ export function ProjectManager() {
     setIsOpen(false);
   };
 
+  const handleExportObj = () => {
+    const exporter = new OBJExporter();
+    const scene = buildExportScene();
+    const objText = exporter.parse(scene);
+    const blob = new Blob([objText], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${activeProjectId ? `project-${activeProjectId}` : 'scene'}.obj`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportObj = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = typeof reader.result === 'string' ? reader.result : '';
+      if (!text) return;
+      const name = file.name.replace(/\.obj$/i, '') || 'Imported OBJ';
+      addObjElement(name, text);
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+  };
+
   return (
     <>
       <div className="absolute top-4 right-4 z-20 flex gap-2">
@@ -80,6 +171,31 @@ export function ProjectManager() {
           )}
           Save
         </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={handleExportObj}
+          className="shadow-lg"
+        >
+          <Download className="w-4 h-4 mr-2" />
+          Export OBJ
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => fileInputRef.current?.click()}
+          className="shadow-lg"
+        >
+          <Upload className="w-4 h-4 mr-2" />
+          Import OBJ
+        </Button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".obj"
+          className="hidden"
+          onChange={handleImportObj}
+        />
       </div>
 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>

@@ -8,6 +8,9 @@ import { useEditorStore } from '@/lib/store';
 
 export default function Editor() {
   const undo = useEditorStore(state => state.undo);
+  const copySelection = useEditorStore(state => state.copySelection);
+  const pasteClipboard = useEditorStore(state => state.pasteClipboard);
+  const duplicateSelection = useEditorStore(state => state.duplicateSelection);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -19,16 +22,35 @@ export default function Editor() {
 
       if (isEditableTarget) return;
 
-      const isUndo = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z';
+      const key = event.key.toLowerCase();
+      const isUndo = (event.ctrlKey || event.metaKey) && key === 'z';
       if (isUndo && !event.shiftKey) {
         event.preventDefault();
         undo();
+        return;
+      }
+
+      if ((event.ctrlKey || event.metaKey) && key === 'c') {
+        event.preventDefault();
+        copySelection();
+        return;
+      }
+
+      if ((event.ctrlKey || event.metaKey) && key === 'v') {
+        event.preventDefault();
+        pasteClipboard();
+        return;
+      }
+
+      if ((event.ctrlKey || event.metaKey) && key === 'd') {
+        event.preventDefault();
+        duplicateSelection();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undo]);
+  }, [copySelection, duplicateSelection, pasteClipboard, undo]);
 
   return (
     <div className="h-screen w-screen flex flex-col bg-background text-foreground overflow-hidden">

@@ -1,9 +1,9 @@
 import React, { useRef } from 'react';
-import { useThree } from '@react-three/fiber';
-import { TransformControls, Box, Sphere, Cylinder, Torus } from '@react-three/drei';
+import { TransformControls } from '@react-three/drei';
 import { Geometry, Base, Subtraction } from '@react-three/csg';
 import { useEditorStore, type SceneElement } from '@/lib/store';
 import * as THREE from 'three';
+import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 
 const Material = ({ color, isSelected }: { color: string, isSelected: boolean }) => (
   <meshStandardMaterial 
@@ -43,6 +43,42 @@ const RecursiveElement = ({ id }: { id: string }) => {
   const ghostRef = useRef<THREE.Group>(null!);
   
   const isSelected = selection.includes(id);
+  const meshObject = React.useMemo(() => {
+    if (!element || element.type !== 'mesh' || !element.objData) return null;
+    const loader = new OBJLoader();
+    const obj = loader.parse(element.objData);
+    obj.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        const mesh = child as THREE.Mesh;
+        mesh.material = new THREE.MeshStandardMaterial({
+          color: element.color,
+          roughness: 0.3,
+          metalness: 0.2,
+        });
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+      }
+    });
+    return obj;
+  }, [element?.type, element?.objData, element?.color]);
+  const ghostMeshObject = React.useMemo(() => {
+    if (!meshObject || !element) return null;
+    const clone = meshObject.clone(true);
+    clone.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        const mesh = child as THREE.Mesh;
+        mesh.material = new THREE.MeshStandardMaterial({
+          color: element.color,
+          transparent: true,
+          opacity: 0.4,
+          depthWrite: false,
+          emissive: new THREE.Color(element.color),
+          emissiveIntensity: 0.5,
+        });
+      }
+    });
+    return clone;
+  }, [meshObject, element?.color]);
 
   const handleClick = (e: any) => {
     e.stopPropagation();
@@ -92,6 +128,7 @@ const RecursiveElement = ({ id }: { id: string }) => {
   const allElements = useEditorStore(state => state.elements);
   const childIds = Object.values(allElements)
     .filter(el => el.parentId === id)
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
     .map(el => el.id);
 
   const renderGeometry = (el: SceneElement) => {
@@ -100,6 +137,7 @@ const RecursiveElement = ({ id }: { id: string }) => {
       case 'sphere': return <sphereGeometry />;
       case 'cylinder': return <cylinderGeometry />;
       case 'torus': return <torusGeometry />;
+      case 'mesh': return null;
       default: return null;
     }
   };
@@ -124,7 +162,11 @@ const RecursiveElement = ({ id }: { id: string }) => {
               );
             })()}
           </Geometry>
-        ) : renderGeometry(element)}
+        ) : element.type === 'mesh' && ghostMeshObject ? (
+          <primitive object={ghostMeshObject} />
+        ) : (
+          renderGeometry(element)
+        )}
         <meshStandardMaterial 
           color={element.color} 
           transparent 
@@ -202,10 +244,16 @@ const RecursiveElement = ({ id }: { id: string }) => {
   // Primitives
   return (
     <>
-      <mesh {...commonProps} visible={!isTransforming}>
-        {renderGeometry(element)}
-        <Material color={element.color} isSelected={isSelected} />
-      </mesh>
+      {element.type === 'mesh' ? (
+        <group {...commonProps} visible={!isTransforming}>
+          {meshObject && <primitive object={meshObject} />}
+        </group>
+      ) : (
+        <mesh {...commonProps} visible={!isTransforming}>
+          {renderGeometry(element)}
+          <Material color={element.color} isSelected={isSelected} />
+        </mesh>
+      )}
 
       {isSelected && (
         <>
@@ -233,6 +281,7 @@ export const Scene = () => {
   // Get only root elements (no parent) to start the recursive render
   const rootIds = Object.values(elements)
     .filter(el => !el.parentId)
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
     .map(el => el.id);
 
   return (
