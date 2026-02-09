@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
+import * as THREE from 'three';
 
 export type ElementType =
   | 'box'
@@ -143,33 +144,33 @@ const collectDescendantIds = (elements: Record<string, SceneElement>, rootIds: s
 };
 
 const getWorldTransform = (elements: Record<string, SceneElement>, element: SceneElement) => {
-  let position: [number, number, number] = [...element.position];
-  let rotation: [number, number, number] = [...element.rotation];
-  let scale: [number, number, number] = [...element.scale];
+  const position = new THREE.Vector3(...element.position);
+  const rotation = new THREE.Euler(...element.rotation);
+  const scale = new THREE.Vector3(...element.scale);
+  const quaternion = new THREE.Quaternion().setFromEuler(rotation);
   let currentParentId = element.parentId;
 
   while (currentParentId) {
     const parent = elements[currentParentId];
     if (!parent) break;
-    position = [
-      position[0] * parent.scale[0] + parent.position[0],
-      position[1] * parent.scale[1] + parent.position[1],
-      position[2] * parent.scale[2] + parent.position[2],
-    ];
-    rotation = [
-      rotation[0] + parent.rotation[0],
-      rotation[1] + parent.rotation[1],
-      rotation[2] + parent.rotation[2],
-    ];
-    scale = [
-      scale[0] * parent.scale[0],
-      scale[1] * parent.scale[1],
-      scale[2] * parent.scale[2],
-    ];
+    const parentScale = new THREE.Vector3(...parent.scale);
+    const parentRotation = new THREE.Euler(...parent.rotation);
+    const parentQuaternion = new THREE.Quaternion().setFromEuler(parentRotation);
+    const parentPosition = new THREE.Vector3(...parent.position);
+
+    position.multiply(parentScale).applyQuaternion(parentQuaternion).add(parentPosition);
+    scale.multiply(parentScale);
+    quaternion.premultiply(parentQuaternion);
+    rotation.setFromQuaternion(quaternion);
+
     currentParentId = parent.parentId;
   }
 
-  return { position, rotation, scale };
+  return {
+    position: [position.x, position.y, position.z] as [number, number, number],
+    rotation: [rotation.x, rotation.y, rotation.z] as [number, number, number],
+    scale: [scale.x, scale.y, scale.z] as [number, number, number],
+  };
 };
 
 const getElementHalfSize = (element: SceneElement): [number, number, number] => {
