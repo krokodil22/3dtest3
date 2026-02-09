@@ -1,12 +1,21 @@
 import type { ChangeEvent } from 'react';
-import { useRef, useState } from 'react';
-import { useProjects, useCreateProject, useUpdateProject } from '@/hooks/use-projects';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useEditorStore, type SceneElement } from '@/lib/store';
+import {
+  buildProjectExport,
+  createStoredProject,
+  getStoredProjects,
+  importProjectExport,
+  parseProjectExport,
+  updateStoredProject,
+  type StoredProject,
+} from '@/lib/project-storage';
+import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Download, FolderOpen, Loader2, Plus, Save, Upload } from 'lucide-react';
+import { Download, FileJson, FolderOpen, Plus, Save, Upload } from 'lucide-react';
 import * as THREE from 'three';
 import { OBJExporter } from 'three/examples/jsm/exporters/OBJExporter.js';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
@@ -15,17 +24,25 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 export function ProjectManager() {
   const [isOpen, setIsOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
-  const [activeProjectId, setActiveProjectId] = useState<number | null>(null);
-
-  const { data: projects, isLoading } = useProjects();
-  const createProject = useCreateProject();
-  const updateProject = useUpdateProject();
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [projects, setProjects] = useState<StoredProject[]>([]);
   
   const elements = useEditorStore(state => state.elements);
   const loadScene = useEditorStore(state => state.loadScene);
   const resetScene = useEditorStore(state => state.resetScene);
   const addObjElement = useEditorStore(state => state.addObjElement);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const jsonInputRef = useRef<HTMLInputElement | null>(null);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    setProjects(getStoredProjects());
+  }, []);
+
+  const activeProject = useMemo(
+    () => projects.find((project) => project.id === activeProjectId) ?? null,
+    [projects, activeProjectId]
+  );
 
   const buildExportScene = () => {
     const scene = new THREE.Scene();
@@ -127,33 +144,36 @@ export function ProjectManager() {
   const handleCreate = async () => {
     if (!newProjectName.trim()) return;
     try {
-      const result = await createProject.mutateAsync({
-        name: newProjectName,
-        elements: {}, // Start empty
-      });
-      setActiveProjectId(result.id);
+      const project = createStoredProject(newProjectName, {});
+      setActiveProjectId(project.id);
+      setProjects(getStoredProjects());
       resetScene();
       setNewProjectName('');
       setIsOpen(false);
+      toast({ title: 'Проект создан', description: 'Сохранен в кэше браузера.' });
     } catch (e) {
       console.error(e);
+      toast({ title: 'Ошибка', description: 'Не удалось создать проект.', variant: 'destructive' });
     }
   };
 
   const handleSave = async () => {
     if (activeProjectId) {
-      updateProject.mutate({
-        id: activeProjectId,
-        elements,
-      });
+      const updated = updateStoredProject(activeProjectId, elements);
+      if (updated) {
+        setProjects(getStoredProjects());
+        toast({ title: 'Сохранено', description: 'Проект обновлен в кэше браузера.' });
+      } else {
+        toast({ title: 'Ошибка', description: 'Проект не найден.', variant: 'destructive' });
+      }
     } else {
       setIsOpen(true); // Open dialog to create/select
     }
   };
 
-  const handleLoad = (project: any) => {
+  const handleLoad = (project: StoredProject) => {
     setActiveProjectId(project.id);
-    loadScene(project.elements as any);
+    loadScene(project.elements);
     setIsOpen(false);
   };
 
@@ -184,6 +204,50 @@ export function ProjectManager() {
     event.target.value = '';
   };
 
+  const handleExportJson = () => {
+    const exportPayload = buildProjectExport({
+      name: activeProject?.name ?? 'Сцена',
+      elements,
+      createdAt: activeProject?.createdAt,
+      updatedAt: activeProject?.updatedAt,
+    });
+    const blob = new Blob([JSON.stringify(exportPayload, null, 2)], {
+      type: 'application/json',
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${activeProject?.name ?? 'scene'}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportJson = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const text = typeof reader.result === 'string' ? reader.result : '';
+        const parsed = parseProjectExport(text);
+        const project = importProjectExport(parsed);
+        setProjects(getStoredProjects());
+        setActiveProjectId(project.id);
+        loadScene(project.elements);
+        toast({
+          title: 'Проект импортирован',
+          description: 'Данные загружены и сохранены в кэше браузера.',
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Не удалось импортировать проект';
+        toast({ title: 'Ошибка', description: message, variant: 'destructive' });
+      } finally {
+        event.target.value = '';
+      }
+    };
+    reader.readAsText(file);
+  };
+
   return (
     <>
       <div className="absolute top-4 right-4 z-20 flex gap-2">
@@ -199,15 +263,28 @@ export function ProjectManager() {
         <Button 
           size="sm" 
           onClick={handleSave}
-          disabled={updateProject.isPending}
           className="shadow-lg"
         >
-          {updateProject.isPending ? (
-            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-          ) : (
-            <Save className="w-4 h-4 mr-2" />
-          )}
+          <Save className="w-4 h-4 mr-2" />
           Сохранить
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={handleExportJson}
+          className="shadow-lg"
+        >
+          <FileJson className="w-4 h-4 mr-2" />
+          Экспорт JSON
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => jsonInputRef.current?.click()}
+          className="shadow-lg"
+        >
+          <Upload className="w-4 h-4 mr-2" />
+          Импорт JSON
         </Button>
         <Button
           size="sm"
@@ -234,6 +311,13 @@ export function ProjectManager() {
           className="hidden"
           onChange={handleImportObj}
         />
+        <input
+          ref={jsonInputRef}
+          type="file"
+          accept="application/json,.json"
+          className="hidden"
+          onChange={handleImportJson}
+        />
       </div>
 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -248,23 +332,19 @@ export function ProjectManager() {
               value={newProjectName}
               onChange={(e) => setNewProjectName(e.target.value)}
             />
-            <Button onClick={handleCreate} disabled={createProject.isPending}>
+            <Button onClick={handleCreate}>
               <Plus className="w-4 h-4" />
             </Button>
           </div>
           
           <ScrollArea className="h-[300px] border rounded-md p-4 bg-muted/20">
-            {isLoading ? (
-              <div className="flex justify-center p-4">
-                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : projects?.length === 0 ? (
+            {projects.length === 0 ? (
                <div className="text-center text-muted-foreground p-4">
                  Проектов пока нет. Создайте первый!
                </div>
             ) : (
               <div className="space-y-2">
-                {projects?.map((project) => (
+                {projects.map((project) => (
                   <div 
                     key={project.id}
                     onClick={() => handleLoad(project)}
