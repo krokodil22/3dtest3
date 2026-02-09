@@ -9,6 +9,8 @@ export type ElementType =
   | 'torus'
   | 'cone'
   | 'pyramid'
+  | 'heart'
+  | 'star'
   | 'group'
   | 'subtraction'
   | 'mesh';
@@ -21,6 +23,8 @@ export const ELEMENT_LABELS: Record<ElementType, string> = {
   torus: 'Тор',
   cone: 'Конус',
   pyramid: 'Пирамида',
+  heart: 'Сердце',
+  star: 'Звезда',
   group: 'Группа',
   subtraction: 'Вычитание',
   mesh: 'Меш',
@@ -194,6 +198,9 @@ const getElementHalfSize = (element: SceneElement): [number, number, number] => 
     case 'cone':
     case 'pyramid':
       return [1, 0.7, 1];
+    case 'heart':
+    case 'star':
+      return [1, 1, 0.2];
     case 'mesh':
       return [0.5, 0.5, 0.5];
     default:
@@ -470,7 +477,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     // Needs exactly 2 meshes
     if (state.selection.length !== 2) return;
     const canSubtract = state.selection.every((id) =>
-      ['box', 'sphere', 'cylinder', 'torus', 'cone', 'pyramid'].includes(state.elements[id]?.type)
+      ['box', 'sphere', 'cylinder', 'torus', 'cone', 'pyramid', 'heart', 'star'].includes(
+        state.elements[id]?.type
+      )
     );
     if (!canSubtract) return;
     

@@ -52,6 +52,34 @@ const PyramidIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
+const HeartIcon = ({ className }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    className={className}
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.5-7 10-7 10Z" />
+  </svg>
+);
+
+const StarIcon = ({ className }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    className={className}
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="m12 3 2.9 5.9 6.5.9-4.7 4.6 1.1 6.6L12 18l-5.8 3 1.1-6.6L2.6 9.8l6.5-.9L12 3Z" />
+  </svg>
+);
+
 export function Toolbar() {
   const addElement = useEditorStore(state => state.addElement);
   const groupSelection = useEditorStore(state => state.groupSelection);
@@ -74,7 +102,9 @@ export function Toolbar() {
   const canSubtract =
     selection.length === 2 &&
     selection.every((id) =>
-      ['box', 'sphere', 'cylinder', 'torus', 'cone', 'pyramid'].includes(elements[id]?.type)
+      ['box', 'sphere', 'cylinder', 'torus', 'cone', 'pyramid', 'heart', 'star'].includes(
+        elements[id]?.type
+      )
     );
 
   const transformTools = [
@@ -90,6 +120,8 @@ export function Toolbar() {
     { label: 'Тор', icon: TorusIcon, action: () => addElement('torus') },
     { label: 'Конус', icon: ConeIcon, action: () => addElement('cone') },
     { label: 'Пирамида', icon: PyramidIcon, action: () => addElement('pyramid') },
+    { label: 'Сердце', icon: HeartIcon, action: () => addElement('heart') },
+    { label: 'Звезда', icon: StarIcon, action: () => addElement('star') },
   ];
 
   const operations = [
