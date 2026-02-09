@@ -46,10 +46,17 @@ export interface SceneElement {
   children?: string[]; // IDs of children
 }
 
+export type SelectionBounds = {
+  min: [number, number, number];
+  max: [number, number, number];
+  center: [number, number, number];
+};
+
 interface EditorState {
   elements: Record<string, SceneElement>;
   selection: string[]; // IDs of selected elements
   transformMode: TransformMode;
+  alignmentMode: boolean;
   history: Array<{
     elements: Record<string, SceneElement>;
     selection: string[];
@@ -71,6 +78,9 @@ interface EditorState {
   setSelection: (ids: string[]) => void;
   clearSelection: () => void;
   setTransformMode: (mode: TransformMode) => void;
+  toggleAlignmentMode: () => void;
+  setAlignmentMode: (enabled: boolean) => void;
+  alignSelection: (axis: 'x' | 'y' | 'z', anchor: 'min' | 'center' | 'max') => void;
   groupSelection: () => void;
   ungroupSelection: () => void;
   subtractSelection: () => void;
@@ -250,6 +260,50 @@ const getSelectionCenter = (
   ] as [number, number, number];
 };
 
+export const getSelectionBounds = (
+  elements: Record<string, SceneElement>,
+  ids: string[],
+  includeDescendants: boolean
+): SelectionBounds | null => {
+  const idsForBounds = includeDescendants ? collectDescendantIds(elements, ids) : ids;
+  let min: [number, number, number] = [Infinity, Infinity, Infinity];
+  let max: [number, number, number] = [-Infinity, -Infinity, -Infinity];
+
+  idsForBounds.forEach((id) => {
+    const element = elements[id];
+    if (!element || element.type === 'group' || element.type === 'subtraction') return;
+    const { position, scale } = getWorldTransform(elements, element);
+    const [halfX, halfY, halfZ] = getElementHalfSize(element);
+    const scaledHalf: [number, number, number] = [
+      halfX * scale[0],
+      halfY * scale[1],
+      halfZ * scale[2],
+    ];
+    min = [
+      Math.min(min[0], position[0] - scaledHalf[0]),
+      Math.min(min[1], position[1] - scaledHalf[1]),
+      Math.min(min[2], position[2] - scaledHalf[2]),
+    ];
+    max = [
+      Math.max(max[0], position[0] + scaledHalf[0]),
+      Math.max(max[1], position[1] + scaledHalf[1]),
+      Math.max(max[2], position[2] + scaledHalf[2]),
+    ];
+  });
+
+  if (!Number.isFinite(min[0])) {
+    return null;
+  }
+
+  const center: [number, number, number] = [
+    (min[0] + max[0]) / 2,
+    (min[1] + max[1]) / 2,
+    (min[2] + max[2]) / 2,
+  ];
+
+  return { min, max, center };
+};
+
 const cloneElement = (element: SceneElement): SceneElement => ({
   ...element,
   position: [...element.position] as [number, number, number],
@@ -301,10 +355,65 @@ const buildSnapshot = (state: EditorState) => ({
   selection: [...state.selection],
 });
 
+const applyWorldDeltaToElement = (
+  elements: Record<string, SceneElement>,
+  element: SceneElement,
+  delta: THREE.Vector3
+) => {
+  if (!element.parentId) {
+    return {
+      ...element,
+      position: [
+        element.position[0] + delta.x,
+        element.position[1] + delta.y,
+        element.position[2] + delta.z,
+      ] as [number, number, number],
+    };
+  }
+
+  const parent = elements[element.parentId];
+  if (!parent) {
+    return {
+      ...element,
+      position: [
+        element.position[0] + delta.x,
+        element.position[1] + delta.y,
+        element.position[2] + delta.z,
+      ] as [number, number, number],
+    };
+  }
+
+  const parentWorld = getWorldTransform(elements, parent);
+  const parentRotation = new THREE.Euler(
+    parentWorld.rotation[0],
+    parentWorld.rotation[1],
+    parentWorld.rotation[2]
+  );
+  const parentQuaternion = new THREE.Quaternion().setFromEuler(parentRotation);
+  const parentScale = new THREE.Vector3(...parentWorld.scale);
+  const safeScale = new THREE.Vector3(
+    parentScale.x === 0 ? 1 : parentScale.x,
+    parentScale.y === 0 ? 1 : parentScale.y,
+    parentScale.z === 0 ? 1 : parentScale.z
+  );
+  const deltaLocal = delta.clone().applyQuaternion(parentQuaternion.clone().invert());
+  deltaLocal.set(deltaLocal.x / safeScale.x, deltaLocal.y / safeScale.y, deltaLocal.z / safeScale.z);
+
+  return {
+    ...element,
+    position: [
+      element.position[0] + deltaLocal.x,
+      element.position[1] + deltaLocal.y,
+      element.position[2] + deltaLocal.z,
+    ] as [number, number, number],
+  };
+};
+
 export const useEditorStore = create<EditorState>((set, get) => ({
   elements: {},
   selection: [],
   transformMode: 'translate',
+  alignmentMode: false,
   history: [],
   redoHistory: [],
   clipboard: null,
@@ -376,11 +485,67 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     });
   },
 
-  setSelection: (ids) => set({ selection: ids }),
+  setSelection: (ids) =>
+    set((state) => ({
+      selection: ids,
+      alignmentMode: ids.length > 1 ? state.alignmentMode : false,
+    })),
   
-  clearSelection: () => set({ selection: [] }),
+  clearSelection: () => set({ selection: [], alignmentMode: false }),
 
   setTransformMode: (mode) => set({ transformMode: mode }),
+
+  toggleAlignmentMode: () =>
+    set((state) => ({
+      alignmentMode: state.selection.length > 1 ? !state.alignmentMode : false,
+    })),
+
+  setAlignmentMode: (enabled) =>
+    set((state) => ({
+      alignmentMode: state.selection.length > 1 ? enabled : false,
+    })),
+
+  alignSelection: (axis, anchor) => {
+    const state = get();
+    if (state.selection.length < 2) return;
+    const bounds = getSelectionBounds(state.elements, state.selection, true);
+    if (!bounds) return;
+    const axisIndex = axis === 'x' ? 0 : axis === 'y' ? 1 : 2;
+    const target = anchor === 'min'
+      ? bounds.min[axisIndex]
+      : anchor === 'max'
+        ? bounds.max[axisIndex]
+        : bounds.center[axisIndex];
+
+    set((state) => {
+      const updatedElements = { ...state.elements };
+      state.selection.forEach((id) => {
+        const element = updatedElements[id];
+        if (!element) return;
+        const elementBounds = getSelectionBounds(state.elements, [id], true);
+        if (!elementBounds) return;
+        const sourceValue =
+          anchor === 'min'
+            ? elementBounds.min[axisIndex]
+            : anchor === 'max'
+              ? elementBounds.max[axisIndex]
+              : elementBounds.center[axisIndex];
+        const deltaValue = target - sourceValue;
+        const delta = new THREE.Vector3(
+          axisIndex === 0 ? deltaValue : 0,
+          axisIndex === 1 ? deltaValue : 0,
+          axisIndex === 2 ? deltaValue : 0
+        );
+        updatedElements[id] = applyWorldDeltaToElement(state.elements, element, delta);
+      });
+
+      return {
+        history: pushHistory(state),
+        redoHistory: [],
+        elements: updatedElements,
+      };
+    });
+  },
 
   groupSelection: () => {
     const state = get();
@@ -631,12 +796,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     set({
       elements: ensureElementOrder(elements),
       selection: [],
+      alignmentMode: false,
       history: [],
       redoHistory: [],
       clipboard: null,
     }),
   
-  resetScene: () => set({ elements: {}, selection: [], history: [], redoHistory: [], clipboard: null }),
+  resetScene: () =>
+    set({ elements: {}, selection: [], alignmentMode: false, history: [], redoHistory: [], clipboard: null }),
 
   undo: () =>
     set((state) => {
