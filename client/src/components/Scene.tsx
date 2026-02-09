@@ -43,6 +43,7 @@ const RecursiveElement = ({ id }: { id: string }) => {
   const transformMode = useEditorStore(state => state.transformMode);
   const setSelection = useEditorStore(state => state.setSelection);
   const updateElement = useEditorStore(state => state.updateElement);
+  const allElements = useEditorStore(state => state.elements);
   const [isTransforming, setIsTransforming] = React.useState(false);
   const ghostRef = useRef<THREE.Group>(null!);
   
@@ -65,6 +66,100 @@ const RecursiveElement = ({ id }: { id: string }) => {
     });
     return obj;
   }, [element?.type, element?.objData, element?.color]);
+
+  const buildBoundingObject = React.useCallback((el: SceneElement): THREE.Object3D | null => {
+    switch (el.type) {
+      case 'group': {
+        const group = new THREE.Group();
+        Object.values(allElements)
+          .filter(child => child.parentId === el.id)
+          .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+          .forEach((child) => {
+            const childObj = buildBoundingObject(child);
+            if (!childObj) return;
+            childObj.position.set(child.position[0], child.position[1], child.position[2]);
+            childObj.rotation.set(child.rotation[0], child.rotation[1], child.rotation[2]);
+            childObj.scale.set(child.scale[0], child.scale[1], child.scale[2]);
+            group.add(childObj);
+          });
+        return group;
+      }
+      case 'subtraction': {
+        const children = Object.values(allElements)
+          .filter(child => child.parentId === el.id)
+          .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        const baseEl = children[0];
+        if (!baseEl) return null;
+        const baseObj = buildBoundingObject(baseEl);
+        if (!baseObj) return null;
+        baseObj.position.set(baseEl.position[0], baseEl.position[1], baseEl.position[2]);
+        baseObj.rotation.set(baseEl.rotation[0], baseEl.rotation[1], baseEl.rotation[2]);
+        baseObj.scale.set(baseEl.scale[0], baseEl.scale[1], baseEl.scale[2]);
+        return baseObj;
+      }
+      case 'mesh': {
+        const obj = el.id === element?.id ? meshObject?.clone(true) : null;
+        if (obj) return obj;
+        if (!el.objData) return null;
+        const loader = new OBJLoader();
+        return loader.parse(el.objData);
+      }
+      case 'box':
+      case 'sphere':
+      case 'cylinder':
+      case 'torus':
+      case 'cone':
+      case 'pyramid': {
+        const geometry = (() => {
+          switch (el.type) {
+            case 'box': {
+              const radius = Math.max(0, Math.min(el.cornerRadius ?? 0, 0.5));
+              return radius > 0 ? new RoundedBoxGeometry(1, 1, 1, 2, radius) : new THREE.BoxGeometry(1, 1, 1);
+            }
+            case 'sphere':
+              return new THREE.SphereGeometry(1, 32, 16);
+            case 'cylinder':
+              return new THREE.CylinderGeometry(1, 1, 1, 32);
+            case 'torus': {
+              const tube = Math.max(0.05, Math.min(el.torusThickness ?? 0.3, 0.95));
+              return new THREE.TorusGeometry(1, tube, 16, 32);
+            }
+            case 'cone':
+              return new THREE.ConeGeometry(1, 1.4, 32);
+            case 'pyramid':
+              return new THREE.ConeGeometry(1, 1.4, 4);
+            default:
+              return null;
+          }
+        })();
+        if (!geometry) return null;
+        return new THREE.Mesh(geometry);
+      }
+      default:
+        return null;
+    }
+  }, [allElements, element?.id, meshObject]);
+
+  const localCenter = React.useMemo(() => {
+    if (!element) return new THREE.Vector3();
+    const object = buildBoundingObject(element);
+    if (!object) return new THREE.Vector3();
+    const box = new THREE.Box3().setFromObject(object);
+    if (box.isEmpty()) return new THREE.Vector3();
+    return box.getCenter(new THREE.Vector3());
+  }, [buildBoundingObject, element]);
+
+  const getGizmoOffset = React.useCallback((rotation: THREE.Euler, scale: THREE.Vector3) => {
+    return localCenter.clone().multiply(scale).applyEuler(rotation);
+  }, [localCenter]);
+
+  const gizmoPosition = React.useMemo(() => {
+    if (!element) return new THREE.Vector3();
+    const rotation = new THREE.Euler(element.rotation[0], element.rotation[1], element.rotation[2]);
+    const scale = new THREE.Vector3(element.scale[0], element.scale[1], element.scale[2]);
+    const offset = getGizmoOffset(rotation, scale);
+    return new THREE.Vector3(element.position[0], element.position[1], element.position[2]).add(offset);
+  }, [element, getGizmoOffset]);
   const ghostMeshObject = React.useMemo(() => {
     if (!meshObject || !element) return null;
     const clone = meshObject.clone(true);
@@ -104,7 +199,10 @@ const RecursiveElement = ({ id }: { id: string }) => {
   const handleTransformChange = (e: any) => {
     if (!e?.target?.object || !ghostRef.current) return;
     const obj = e.target.object;
-    ghostRef.current.position.copy(obj.position);
+    const rotation = new THREE.Euler(obj.rotation.x, obj.rotation.y, obj.rotation.z);
+    const scale = new THREE.Vector3(obj.scale.x, obj.scale.y, obj.scale.z);
+    const offset = getGizmoOffset(rotation, scale);
+    ghostRef.current.position.set(obj.position.x - offset.x, obj.position.y - offset.y, obj.position.z - offset.z);
     ghostRef.current.rotation.copy(obj.rotation);
     ghostRef.current.scale.copy(obj.scale);
   };
@@ -113,8 +211,11 @@ const RecursiveElement = ({ id }: { id: string }) => {
      setIsTransforming(false);
      if (!e?.target?.object) return;
      const obj = e.target.object;
+     const rotation = new THREE.Euler(obj.rotation.x, obj.rotation.y, obj.rotation.z);
+     const scale = new THREE.Vector3(obj.scale.x, obj.scale.y, obj.scale.z);
+     const offset = getGizmoOffset(rotation, scale);
      updateElement(id, {
-       position: [obj.position.x, obj.position.y, obj.position.z],
+       position: [obj.position.x - offset.x, obj.position.y - offset.y, obj.position.z - offset.z],
        rotation: [obj.rotation.x, obj.rotation.y, obj.rotation.z],
        scale: [obj.scale.x, obj.scale.y, obj.scale.z],
      });
@@ -132,7 +233,6 @@ const RecursiveElement = ({ id }: { id: string }) => {
   };
 
   // Find children
-  const allElements = useEditorStore(state => state.elements);
   const childIds = Object.values(allElements)
     .filter(el => el.parentId === id)
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
@@ -212,7 +312,10 @@ const RecursiveElement = ({ id }: { id: string }) => {
                mode={transformMode} 
                onMouseDown={handleTransformStart}
                onChange={handleTransformChange}
-               onMouseUp={handleTransformEnd} 
+               onMouseUp={handleTransformEnd}
+               position={gizmoPosition}
+               rotation={element.rotation}
+               scale={element.scale}
              />
           )}
           {isSelected && isTransforming && <GhostPreview />}
@@ -247,7 +350,10 @@ const RecursiveElement = ({ id }: { id: string }) => {
              mode={transformMode} 
              onMouseDown={handleTransformStart}
              onChange={handleTransformChange}
-             onMouseUp={handleTransformEnd} 
+             onMouseUp={handleTransformEnd}
+             position={gizmoPosition}
+             rotation={element.rotation}
+             scale={element.scale}
            />
         )}
         {isSelected && isTransforming && <GhostPreview />}
@@ -282,7 +388,7 @@ const RecursiveElement = ({ id }: { id: string }) => {
               onMouseDown={handleTransformStart}
               onChange={handleTransformChange}
               onMouseUp={handleTransformEnd}
-              position={element.position}
+              position={gizmoPosition}
               rotation={element.rotation}
               scale={element.scale}
           />
