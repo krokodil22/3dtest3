@@ -9,12 +9,15 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 
 extend({ RoundedBoxGeometry });
 
-const Material = ({ color, isSelected }: { color: string, isSelected: boolean }) => (
+const Material = ({ color, isSelected, opacity = 1 }: { color: string, isSelected: boolean, opacity?: number }) => (
   <meshStandardMaterial 
     color={color} 
     emissive={isSelected ? '#444' : '#000'}
     roughness={0.3}
     metalness={0.2}
+    transparent={opacity < 1}
+    opacity={opacity}
+    depthWrite={opacity >= 1}
   />
 );
 
@@ -37,7 +40,7 @@ const ElementRenderer = ({ id }: { id: string }) => {
 };
 
 // Recursive component to handle hierarchy
-const RecursiveElement = ({ id }: { id: string }) => {
+const RecursiveElement = ({ id, inheritedOpacity = 1 }: { id: string; inheritedOpacity?: number }) => {
   const element = useEditorStore(state => state.elements[id]);
   const selection = useEditorStore(state => state.selection);
   const transformMode = useEditorStore(state => state.transformMode);
@@ -46,6 +49,7 @@ const RecursiveElement = ({ id }: { id: string }) => {
   const allElements = useEditorStore(state => state.elements);
   const [isTransforming, setIsTransforming] = React.useState(false);
   const ghostRef = useRef<THREE.Group>(null!);
+  const effectiveOpacity = inheritedOpacity;
   
   const isSelected = selection.includes(id);
   const meshObject = React.useMemo(() => {
@@ -66,6 +70,30 @@ const RecursiveElement = ({ id }: { id: string }) => {
     });
     return obj;
   }, [element?.type, element?.objData, element?.color]);
+
+  const transparentMeshObject = React.useMemo(() => {
+    if (!meshObject || !element || effectiveOpacity >= 1) return null;
+    const clone = meshObject.clone(true);
+    const color = new THREE.Color(element.color);
+    clone.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        const mesh = child as THREE.Mesh;
+        mesh.material = new THREE.MeshStandardMaterial({
+          color,
+          roughness: 0.3,
+          metalness: 0.2,
+          transparent: true,
+          opacity: effectiveOpacity,
+          depthWrite: false,
+          emissive: color,
+          emissiveIntensity: 0.2,
+        });
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+      }
+    });
+    return clone;
+  }, [meshObject, element, effectiveOpacity]);
 
   const buildBoundingObject = React.useCallback((el: SceneElement): THREE.Object3D | null => {
     switch (el.type) {
@@ -181,15 +209,29 @@ const RecursiveElement = ({ id }: { id: string }) => {
 
   const handleClick = (e: any) => {
     e.stopPropagation();
+    let targetId = id;
+    let current = element;
+    while (current?.parentId) {
+      const parent = allElements[current.parentId];
+      if (parent?.type === 'group') {
+        targetId = parent.id;
+      }
+      current = parent;
+    }
     // Multi-select with shift
     if (e.shiftKey) {
-      const nextSelection = selection.includes(id)
-        ? selection.filter((selectedId) => selectedId !== id)
-        : [...selection, id];
+      const nextSelection = selection.includes(targetId)
+        ? selection.filter((selectedId) => selectedId !== targetId)
+        : [...selection, targetId];
       setSelection(nextSelection);
     } else {
-      setSelection([id]);
+      setSelection([targetId]);
     }
+  };
+
+  const handleDoubleClick = (e: any) => {
+    e.stopPropagation();
+    setSelection([id]);
   };
 
   const handleTransformStart = () => {
@@ -228,6 +270,7 @@ const RecursiveElement = ({ id }: { id: string }) => {
     rotation: element.rotation,
     scale: element.scale,
     onClick: handleClick,
+    onDoubleClick: handleDoubleClick,
     castShadow: true,
     receiveShadow: true,
   };
@@ -325,9 +368,9 @@ const RecursiveElement = ({ id }: { id: string }) => {
                 {renderGeometry(subEl)}
               </Subtraction>
             </Geometry>
-            <Material color={baseEl.color} isSelected={isSelected} />
-          </mesh>
-        </group>
+          <Material color={baseEl.color} isSelected={isSelected} opacity={effectiveOpacity} />
+        </mesh>
+      </group>
         {isSelected && (
           <TransformControls 
             mode={transformMode} 
@@ -339,7 +382,6 @@ const RecursiveElement = ({ id }: { id: string }) => {
             scale={element.scale}
           />
         )}
-        {isSelected && isTransforming && <GhostPreview />}
       </>
     );
   }
@@ -348,11 +390,13 @@ const RecursiveElement = ({ id }: { id: string }) => {
     return (
       <>
         <group {...commonProps}>
-          <group visible={!isTransforming}>
-            {childIds.map(childId => (
-              <RecursiveElement key={childId} id={childId} />
-            ))}
-          </group>
+          {childIds.map(childId => (
+            <RecursiveElement
+              key={childId}
+              id={childId}
+              inheritedOpacity={isTransforming ? Math.min(effectiveOpacity, 0.6) : effectiveOpacity}
+            />
+          ))}
         </group>
         {isSelected && (
           <TransformControls 
@@ -365,7 +409,6 @@ const RecursiveElement = ({ id }: { id: string }) => {
             scale={element.scale}
           />
         )}
-        {isSelected && isTransforming && <GhostPreview />}
       </>
     );
   }
@@ -375,12 +418,12 @@ const RecursiveElement = ({ id }: { id: string }) => {
     <>
       {element.type === 'mesh' ? (
         <group {...commonProps} visible={!isTransforming}>
-          {meshObject && <primitive object={meshObject} />}
+          {meshObject && <primitive object={effectiveOpacity < 1 ? transparentMeshObject ?? meshObject : meshObject} />}
         </group>
       ) : (
         <mesh {...commonProps} visible={!isTransforming}>
           {renderGeometry(element)}
-          <Material color={element.color} isSelected={isSelected} />
+          <Material color={element.color} isSelected={isSelected} opacity={effectiveOpacity} />
         </mesh>
       )}
 
