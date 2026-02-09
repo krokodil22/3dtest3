@@ -1,7 +1,16 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 
-export type ElementType = 'box' | 'sphere' | 'cylinder' | 'torus' | 'group' | 'subtraction' | 'mesh';
+export type ElementType =
+  | 'box'
+  | 'sphere'
+  | 'cylinder'
+  | 'torus'
+  | 'cone'
+  | 'pyramid'
+  | 'group'
+  | 'subtraction'
+  | 'mesh';
 export type TransformMode = 'translate' | 'rotate' | 'scale';
 
 export interface SceneElement {
@@ -13,6 +22,8 @@ export interface SceneElement {
   rotation: [number, number, number];
   scale: [number, number, number];
   color: string;
+  cornerRadius?: number;
+  torusThickness?: number;
   objData?: string;
   parentId?: string;
   children?: string[]; // IDs of children
@@ -180,6 +191,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       type,
       order: getNextOrder(get().elements),
       ...DEFAULT_ELEMENT_PROPS,
+      ...(type === 'box' ? { cornerRadius: 0 } : {}),
+      ...(type === 'torus' ? { torusThickness: 0.3 } : {}),
       // Offset slightly so they don't overlap perfectly
       position: [Math.random() * 2 - 1, Math.random() * 2, Math.random() * 2 - 1],
     };
@@ -313,7 +326,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     // Needs exactly 2 meshes
     if (state.selection.length !== 2) return;
     const canSubtract = state.selection.every((id) =>
-      ['box', 'sphere', 'cylinder', 'torus'].includes(state.elements[id]?.type)
+      ['box', 'sphere', 'cylinder', 'torus', 'cone', 'pyramid'].includes(state.elements[id]?.type)
     );
     if (!canSubtract) return;
     

@@ -4,7 +4,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { Cuboid, Layers, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Cuboid, Layers, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -39,6 +39,7 @@ export function Sidebar() {
   const removeElements = useEditorStore(state => state.removeElements);
   const reorderElements = useEditorStore(state => state.reorderElements);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set());
 
   const selectedId = selection.length === 1 ? selection[0] : null;
   const selectedElement = selectedId ? elements[selectedId] : null;
@@ -64,6 +65,8 @@ export function Sidebar() {
 
   const renderElementRow = (el: SceneElement, depth: number) => {
     const childElements = childrenByParent.get(el.id) ?? [];
+    const hasChildren = childElements.length > 0;
+    const isCollapsed = collapsedIds.has(el.id);
 
     return (
       <div key={el.id}>
@@ -74,7 +77,16 @@ export function Sidebar() {
             draggingId === el.id && "opacity-50"
           )}
           style={{ paddingLeft: `${12 + depth * 16}px` }}
-          onClick={() => setSelection([el.id])}
+          onClick={(event) => {
+            if (event.shiftKey) {
+              const nextSelection = selection.includes(el.id)
+                ? selection.filter((selectedId) => selectedId !== el.id)
+                : [...selection, el.id];
+              setSelection(nextSelection);
+            } else {
+              setSelection([el.id]);
+            }
+          }}
           draggable
           onDragStart={(event) => {
             event.dataTransfer.setData('text/plain', el.id);
@@ -95,13 +107,39 @@ export function Sidebar() {
             setDraggingId(null);
           }}
         >
+          {hasChildren ? (
+            <button
+              type="button"
+              className="w-4 h-4 flex items-center justify-center text-muted-foreground hover:text-foreground"
+              onClick={(event) => {
+                event.stopPropagation();
+                setCollapsedIds((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(el.id)) {
+                    next.delete(el.id);
+                  } else {
+                    next.add(el.id);
+                  }
+                  return next;
+                });
+              }}
+            >
+              {isCollapsed ? (
+                <ChevronRight className="w-3 h-3" />
+              ) : (
+                <ChevronDown className="w-3 h-3" />
+              )}
+            </button>
+          ) : (
+            <span className="w-4 h-4" />
+          )}
           <Cuboid className="w-3.5 h-3.5 opacity-70" />
           <span className="truncate flex-1">{el.name}</span>
           <span className="text-[10px] uppercase text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
             {el.type}
           </span>
         </div>
-        {childElements.length > 0 && (
+        {hasChildren && !isCollapsed && (
           <div className="space-y-1">
             {childElements.map((child) => renderElementRow(child, depth + 1))}
           </div>
@@ -252,6 +290,49 @@ export function Sidebar() {
                   />
                 </div>
               </div>
+
+              {selectedElement.type === 'box' && (
+                <div className="space-y-3">
+                  <Label className="text-xs uppercase text-muted-foreground">Box</Label>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-muted-foreground">Corner radius</span>
+                    <Input
+                      type="number"
+                      step={0.05}
+                      min={0}
+                      className="h-7 w-24 text-xs px-2"
+                      value={selectedElement.cornerRadius ?? 0}
+                      onChange={(e) => {
+                        const nextValue = Math.max(
+                          0,
+                          Math.min(0.5, parseFloat(e.target.value) || 0)
+                        );
+                        updateElement(selectedElement.id, { cornerRadius: nextValue });
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {selectedElement.type === 'torus' && (
+                <div className="space-y-3">
+                  <Label className="text-xs uppercase text-muted-foreground">Torus</Label>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-muted-foreground">Thickness</span>
+                    <Input
+                      type="number"
+                      step={0.05}
+                      min={0.05}
+                      className="h-7 w-24 text-xs px-2"
+                      value={selectedElement.torusThickness ?? 0.3}
+                      onChange={(e) => {
+                        const nextValue = Math.max(0.05, parseFloat(e.target.value) || 0.05);
+                        updateElement(selectedElement.id, { torusThickness: nextValue });
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
               
               <div className="space-y-2">
                 <Label className="text-xs uppercase text-muted-foreground">Color</Label>

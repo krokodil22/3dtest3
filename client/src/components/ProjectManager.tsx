@@ -10,6 +10,7 @@ import { Download, FolderOpen, Loader2, Plus, Save, Upload } from 'lucide-react'
 import * as THREE from 'three';
 import { OBJExporter } from 'three/examples/jsm/exporters/OBJExporter.js';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 
 export function ProjectManager() {
   const [isOpen, setIsOpen] = useState(false);
@@ -50,7 +51,12 @@ export function ProjectManager() {
 
       switch (element.type) {
         case 'box':
-          object = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material);
+          if (element.cornerRadius && element.cornerRadius > 0) {
+            const radius = Math.max(0, Math.min(element.cornerRadius, 0.5));
+            object = new THREE.Mesh(new RoundedBoxGeometry(1, 1, 1, 2, radius), material);
+          } else {
+            object = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material);
+          }
           break;
         case 'sphere':
           object = new THREE.Mesh(new THREE.SphereGeometry(0.5, 32, 32), material);
@@ -59,7 +65,21 @@ export function ProjectManager() {
           object = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 1, 32), material);
           break;
         case 'torus':
-          object = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.2, 16, 100), material);
+          object = new THREE.Mesh(
+            new THREE.TorusGeometry(
+              0.5,
+              Math.max(0.05, Math.min(element.torusThickness ?? 0.3, 0.95)),
+              16,
+              100
+            ),
+            material
+          );
+          break;
+        case 'cone':
+          object = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.4, 32), material);
+          break;
+        case 'pyramid':
+          object = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.4, 4), material);
           break;
         case 'mesh': {
           if (!element.objData) {

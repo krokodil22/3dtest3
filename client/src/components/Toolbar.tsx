@@ -1,11 +1,56 @@
 import { 
   Box, Circle, Cylinder, Combine, 
-  Group, Ungroup, MousePointer2, Move, RotateCw, Maximize, Undo2
+  Group, Ungroup, Move, RotateCw, Maximize, Undo2
 } from 'lucide-react';
 import { useEditorStore } from '@/lib/store';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+
+const TorusIcon = ({ className }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    className={className}
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <circle cx="12" cy="12" r="7" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+);
+
+const ConeIcon = ({ className }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    className={className}
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M12 4L6 19h12L12 4Z" />
+    <ellipse cx="12" cy="19" rx="6" ry="2" />
+  </svg>
+);
+
+const PyramidIcon = ({ className }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    className={className}
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M12 4L4 19h16L12 4Z" />
+    <path d="M4 19h16" />
+  </svg>
+);
 
 export function Toolbar() {
   const addElement = useEditorStore(state => state.addElement);
@@ -24,7 +69,7 @@ export function Toolbar() {
   const canSubtract =
     selection.length === 2 &&
     selection.every((id) =>
-      ['box', 'sphere', 'cylinder', 'torus'].includes(elements[id]?.type)
+      ['box', 'sphere', 'cylinder', 'torus', 'cone', 'pyramid'].includes(elements[id]?.type)
     );
 
   const transformTools = [
@@ -37,7 +82,9 @@ export function Toolbar() {
     { label: 'Box', icon: Box, action: () => addElement('box') },
     { label: 'Sphere', icon: Circle, action: () => addElement('sphere') },
     { label: 'Cylinder', icon: Cylinder, action: () => addElement('cylinder') },
-    { label: 'Torus', icon: Circle, action: () => addElement('torus') }, // Reusing circle for now or find custom icon
+    { label: 'Torus', icon: TorusIcon, action: () => addElement('torus') },
+    { label: 'Cone', icon: ConeIcon, action: () => addElement('cone') },
+    { label: 'Pyramid', icon: PyramidIcon, action: () => addElement('pyramid') },
   ];
 
   const operations = [

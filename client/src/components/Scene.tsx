@@ -2,8 +2,12 @@ import React, { useRef } from 'react';
 import { TransformControls } from '@react-three/drei';
 import { Geometry, Base, Subtraction } from '@react-three/csg';
 import { useEditorStore, type SceneElement } from '@/lib/store';
+import { extend } from '@react-three/fiber';
 import * as THREE from 'three';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
+
+extend({ RoundedBoxGeometry });
 
 const Material = ({ color, isSelected }: { color: string, isSelected: boolean }) => (
   <meshStandardMaterial 
@@ -84,7 +88,10 @@ const RecursiveElement = ({ id }: { id: string }) => {
     e.stopPropagation();
     // Multi-select with shift
     if (e.shiftKey) {
-      setSelection([...selection, id]);
+      const nextSelection = selection.includes(id)
+        ? selection.filter((selectedId) => selectedId !== id)
+        : [...selection, id];
+      setSelection(nextSelection);
     } else {
       setSelection([id]);
     }
@@ -133,10 +140,22 @@ const RecursiveElement = ({ id }: { id: string }) => {
 
   const renderGeometry = (el: SceneElement) => {
     switch (el.type) {
-      case 'box': return <boxGeometry />;
-      case 'sphere': return <sphereGeometry />;
-      case 'cylinder': return <cylinderGeometry />;
-      case 'torus': return <torusGeometry />;
+      case 'box': {
+        const radius = Math.max(0, Math.min(el.cornerRadius ?? 0, 0.5));
+        return radius > 0 ? <roundedBoxGeometry args={[1, 1, 1, 2, radius]} /> : <boxGeometry />;
+      }
+      case 'sphere':
+        return <sphereGeometry />;
+      case 'cylinder':
+        return <cylinderGeometry />;
+      case 'torus': {
+        const tube = Math.max(0.05, Math.min(el.torusThickness ?? 0.3, 0.95));
+        return <torusGeometry args={[1, tube, 16, 32]} />;
+      }
+      case 'cone':
+        return <coneGeometry args={[1, 1.4, 32]} />;
+      case 'pyramid':
+        return <coneGeometry args={[1, 1.4, 4]} />;
       case 'mesh': return null;
       default: return null;
     }
