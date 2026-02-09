@@ -34,6 +34,7 @@ export function ProjectManager() {
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [projects, setProjects] = useState<StoredProject[]>([]);
   const [projectName, setProjectName] = useState('');
+  const [autoSaveEnabled, setAutoSaveEnabled] = useState(false);
   
   const elements = useEditorStore(state => state.elements);
   const loadScene = useEditorStore(state => state.loadScene);
@@ -45,15 +46,11 @@ export function ProjectManager() {
   const { toast } = useToast();
 
   useEffect(() => {
-    const stored = getStoredProjects();
-    if (stored.length === 0) {
-      const project = createStoredProject('Новый проект', {});
-      setActiveProjectId(project.id);
-      setProjects(getStoredProjects());
-      resetScene();
-      return;
-    }
-    setProjects(stored);
+    const project = createStoredProject('Новый проект', {});
+    setActiveProjectId(project.id);
+    setProjects(getStoredProjects());
+    resetScene();
+    setAutoSaveEnabled(false);
   }, [resetScene]);
 
   const activeProject = useMemo(
@@ -74,7 +71,7 @@ export function ProjectManager() {
   }, [activeProject?.name]);
 
   useEffect(() => {
-    if (!activeProjectId) return;
+    if (!activeProjectId || !autoSaveEnabled) return;
     const interval = window.setInterval(() => {
       const id = activeProjectIdRef.current;
       if (!id) return;
@@ -85,7 +82,17 @@ export function ProjectManager() {
     }, 20000);
 
     return () => window.clearInterval(interval);
-  }, [activeProjectId]);
+  }, [activeProjectId, autoSaveEnabled]);
+
+  useEffect(() => {
+    if (!activeProjectId || autoSaveEnabled) return;
+    if (Object.keys(elements).length === 0) return;
+    setAutoSaveEnabled(true);
+    const updated = updateStoredProject(activeProjectId, elements);
+    if (updated) {
+      setProjects(getStoredProjects());
+    }
+  }, [activeProjectId, autoSaveEnabled, elements]);
 
   const buildExportScene = () => {
     const scene = new THREE.Scene();
@@ -191,6 +198,7 @@ export function ProjectManager() {
       setActiveProjectId(project.id);
       setProjects(getStoredProjects());
       resetScene();
+      setAutoSaveEnabled(false);
       setNewProjectName('');
       setIsOpen(false);
       toast({ title: 'Проект создан', description: 'Сохранен в кэше браузера.' });
@@ -223,6 +231,7 @@ export function ProjectManager() {
     }
     setActiveProjectId(project.id);
     loadScene(project.elements);
+    setAutoSaveEnabled(Object.keys(project.elements).length > 0);
     setIsOpen(false);
   };
 
@@ -273,6 +282,7 @@ export function ProjectManager() {
           setProjects(getStoredProjects());
           setActiveProjectId(project.id);
           loadScene(project.elements);
+          setAutoSaveEnabled(Object.keys(project.elements).length > 0);
           toast({
             title: 'Проект импортирован',
             description: 'Данные загружены и сохранены в кэше браузера.',

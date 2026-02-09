@@ -8,6 +8,7 @@ import { useEditorStore } from '@/lib/store';
 
 export default function Editor() {
   const undo = useEditorStore(state => state.undo);
+  const redo = useEditorStore(state => state.redo);
   const copySelection = useEditorStore(state => state.copySelection);
   const pasteClipboard = useEditorStore(state => state.pasteClipboard);
   const duplicateSelection = useEditorStore(state => state.duplicateSelection);
@@ -25,26 +26,40 @@ export default function Editor() {
       if (isEditableTarget) return;
 
       const key = event.key.toLowerCase();
-      const isUndo = (event.ctrlKey || event.metaKey) && key === 'z';
-      if (isUndo && !event.shiftKey) {
+      const code = event.code.toLowerCase();
+      const hasModifier = event.ctrlKey || event.metaKey;
+      const isUndo = hasModifier && (key === 'z' || code === 'keyz');
+      if (isUndo && event.shiftKey) {
+        event.preventDefault();
+        redo();
+        return;
+      }
+
+      if (isUndo) {
         event.preventDefault();
         undo();
         return;
       }
 
-      if ((event.ctrlKey || event.metaKey) && key === 'c') {
+      if (hasModifier && (key === 'y' || code === 'keyy')) {
+        event.preventDefault();
+        redo();
+        return;
+      }
+
+      if (hasModifier && (key === 'c' || code === 'keyc')) {
         event.preventDefault();
         copySelection();
         return;
       }
 
-      if ((event.ctrlKey || event.metaKey) && key === 'v') {
+      if (hasModifier && (key === 'v' || code === 'keyv')) {
         event.preventDefault();
         pasteClipboard();
         return;
       }
 
-      if ((event.ctrlKey || event.metaKey) && key === 'd') {
+      if (hasModifier && (key === 'd' || code === 'keyd')) {
         event.preventDefault();
         duplicateSelection();
         return;
@@ -58,7 +73,7 @@ export default function Editor() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [copySelection, duplicateSelection, pasteClipboard, removeElements, selection, undo]);
+  }, [copySelection, duplicateSelection, pasteClipboard, redo, removeElements, selection, undo]);
 
   return (
     <div className="h-screen w-screen flex flex-col bg-background text-foreground overflow-hidden">

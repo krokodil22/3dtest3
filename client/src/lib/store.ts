@@ -50,6 +50,10 @@ interface EditorState {
     elements: Record<string, SceneElement>;
     selection: string[];
   }>;
+  redoHistory: Array<{
+    elements: Record<string, SceneElement>;
+    selection: string[];
+  }>;
   clipboard: {
     elements: SceneElement[];
     selection: string[];
@@ -73,6 +77,7 @@ interface EditorState {
   loadScene: (elements: Record<string, SceneElement>) => void;
   resetScene: () => void;
   undo: () => void;
+  redo: () => void;
 }
 
 const DEFAULT_ELEMENT_PROPS = {
@@ -284,11 +289,17 @@ const pushHistory = (state: EditorState) =>
     -MAX_HISTORY
   );
 
+const buildSnapshot = (state: EditorState) => ({
+  elements: cloneElements(state.elements),
+  selection: [...state.selection],
+});
+
 export const useEditorStore = create<EditorState>((set, get) => ({
   elements: {},
   selection: [],
   transformMode: 'translate',
   history: [],
+  redoHistory: [],
   clipboard: null,
 
   addElement: (type) => {
@@ -307,6 +318,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
     set((state) => ({
       history: pushHistory(state),
+      redoHistory: [],
       elements: { ...state.elements, [id]: newElement },
       selection: [id], // Auto-select new item
     }));
@@ -326,6 +338,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
     set((state) => ({
       history: pushHistory(state),
+      redoHistory: [],
       elements: { ...state.elements, [id]: newElement },
       selection: [id],
     }));
@@ -334,6 +347,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   updateElement: (id, updates) => {
     set((state) => ({
       history: pushHistory(state),
+      redoHistory: [],
       elements: {
         ...state.elements,
         [id]: { ...state.elements[id], ...updates },
@@ -348,6 +362,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       idsToRemove.forEach((id) => delete newElements[id]);
       return {
         history: pushHistory(state),
+        redoHistory: [],
         elements: newElements,
         selection: state.selection.filter((selId) => !idsToRemove.includes(selId)),
       };
@@ -401,6 +416,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       
       return {
         history: pushHistory(state),
+        redoHistory: [],
         elements: { ...updatedElements, [groupId]: group },
         selection: [groupId],
       };
@@ -442,6 +458,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
       return {
         history: pushHistory(state),
+        redoHistory: [],
         elements: updatedElements,
         selection: newSelection,
       };
@@ -501,6 +518,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
        
        return {
          history: pushHistory(state),
+         redoHistory: [],
          elements: { ...updatedElements, [csgId]: csgElement },
          selection: [csgId],
        };
@@ -526,6 +544,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
       return {
         history: pushHistory(state),
+        redoHistory: [],
         elements: updatedElements,
       };
     });
@@ -565,6 +584,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
     set({
       history: pushHistory(state),
+      redoHistory: [],
       elements: updatedElements,
       selection: newSelection,
     });
@@ -592,15 +612,22 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
     set({
       history: pushHistory(state),
+      redoHistory: [],
       elements: updatedElements,
       selection: newSelection,
     });
   },
 
   loadScene: (elements) =>
-    set({ elements: ensureElementOrder(elements), selection: [], history: [], clipboard: null }),
+    set({
+      elements: ensureElementOrder(elements),
+      selection: [],
+      history: [],
+      redoHistory: [],
+      clipboard: null,
+    }),
   
-  resetScene: () => set({ elements: {}, selection: [], history: [], clipboard: null }),
+  resetScene: () => set({ elements: {}, selection: [], history: [], redoHistory: [], clipboard: null }),
 
   undo: () =>
     set((state) => {
@@ -610,6 +637,19 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         elements: previous.elements,
         selection: previous.selection,
         history: state.history.slice(0, -1),
+        redoHistory: [...state.redoHistory, buildSnapshot(state)].slice(-MAX_HISTORY),
+      };
+    }),
+
+  redo: () =>
+    set((state) => {
+      if (state.redoHistory.length === 0) return state;
+      const next = state.redoHistory[state.redoHistory.length - 1];
+      return {
+        elements: next.elements,
+        selection: next.selection,
+        history: pushHistory(state),
+        redoHistory: state.redoHistory.slice(0, -1),
       };
     }),
 }));

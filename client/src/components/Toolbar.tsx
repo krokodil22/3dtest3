@@ -1,6 +1,6 @@
 import { 
   Box, Circle, Cylinder, Combine, 
-  Group, Ungroup, Move, RotateCw, Maximize, Undo2
+  Group, Ungroup, Move, RotateCw, Maximize, Undo2, Redo2, Copy, ClipboardPaste, CopyPlus
 } from 'lucide-react';
 import { useEditorStore } from '@/lib/store';
 import { Button } from '@/components/ui/button';
@@ -58,7 +58,12 @@ export function Toolbar() {
   const ungroupSelection = useEditorStore(state => state.ungroupSelection);
   const subtractSelection = useEditorStore(state => state.subtractSelection);
   const undo = useEditorStore(state => state.undo);
+  const redo = useEditorStore(state => state.redo);
   const canUndo = useEditorStore(state => state.history.length > 0);
+  const canRedo = useEditorStore(state => state.redoHistory.length > 0);
+  const copySelection = useEditorStore(state => state.copySelection);
+  const pasteClipboard = useEditorStore(state => state.pasteClipboard);
+  const duplicateSelection = useEditorStore(state => state.duplicateSelection);
   const selection = useEditorStore(state => state.selection);
   const elements = useEditorStore(state => state.elements);
   const transformMode = useEditorStore(state => state.transformMode);
@@ -149,6 +154,61 @@ export function Toolbar() {
               </Button>
             </TooltipTrigger>
             <TooltipContent>Отменить (Ctrl+Z)</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={redo}
+                disabled={!canRedo}
+                className="hover:bg-accent hover:text-accent-foreground"
+              >
+                <Redo2 className="w-5 h-5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Повторить (Ctrl+Y)</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={copySelection}
+                disabled={selection.length === 0}
+                className="hover:bg-accent hover:text-accent-foreground"
+              >
+                <Copy className="w-5 h-5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Копировать (Ctrl+C)</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={pasteClipboard}
+                className="hover:bg-accent hover:text-accent-foreground"
+              >
+                <ClipboardPaste className="w-5 h-5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Вставить (Ctrl+V)</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={duplicateSelection}
+                disabled={selection.length === 0}
+                className="hover:bg-accent hover:text-accent-foreground"
+              >
+                <CopyPlus className="w-5 h-5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Дублировать (Ctrl+D)</TooltipContent>
           </Tooltip>
         </div>
 
