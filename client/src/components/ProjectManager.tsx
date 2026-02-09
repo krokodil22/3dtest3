@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Download, FileJson, FolderOpen, Plus, Save, Upload, ChevronDown } from 'lucide-react';
+import { Download, FileJson, FolderOpen, Menu, Plus, Save, Upload } from 'lucide-react';
 import * as THREE from 'three';
 import { OBJExporter } from 'three/examples/jsm/exporters/OBJExporter.js';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
@@ -39,15 +39,22 @@ export function ProjectManager() {
   const loadScene = useEditorStore(state => state.loadScene);
   const resetScene = useEditorStore(state => state.resetScene);
   const addObjElement = useEditorStore(state => state.addObjElement);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const jsonInputRef = useRef<HTMLInputElement | null>(null);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
   const elementsRef = useRef(elements);
   const activeProjectIdRef = useRef(activeProjectId);
   const { toast } = useToast();
 
   useEffect(() => {
-    setProjects(getStoredProjects());
-  }, []);
+    const stored = getStoredProjects();
+    if (stored.length === 0) {
+      const project = createStoredProject('Новый проект', {});
+      setActiveProjectId(project.id);
+      setProjects(getStoredProjects());
+      resetScene();
+      return;
+    }
+    setProjects(stored);
+  }, [resetScene]);
 
   const activeProject = useMemo(
     () => projects.find((project) => project.id === activeProjectId) ?? null,
@@ -246,15 +253,42 @@ export function ProjectManager() {
     URL.revokeObjectURL(url);
   };
 
-  const handleImportObj = (event: ChangeEvent<HTMLInputElement>) => {
+  const handleImportFile = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    const filename = file.name.toLowerCase();
     const reader = new FileReader();
     reader.onload = () => {
       const text = typeof reader.result === 'string' ? reader.result : '';
       if (!text) return;
-      const name = file.name.replace(/\.obj$/i, '') || 'Импорт OBJ';
-      addObjElement(name, text);
+      if (filename.endsWith('.obj')) {
+        const name = file.name.replace(/\.obj$/i, '') || 'Импорт OBJ';
+        addObjElement(name, text);
+        return;
+      }
+      if (filename.endsWith('.json')) {
+        try {
+          const parsed = parseProjectExport(text);
+          const project = importProjectExport(parsed);
+          setProjects(getStoredProjects());
+          setActiveProjectId(project.id);
+          loadScene(project.elements);
+          toast({
+            title: 'Проект импортирован',
+            description: 'Данные загружены и сохранены в кэше браузера.',
+          });
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : 'Не удалось импортировать проект';
+          toast({ title: 'Ошибка', description: message, variant: 'destructive' });
+        }
+        return;
+      }
+      toast({
+        title: 'Ошибка',
+        description: 'Поддерживаются только файлы JSON или OBJ.',
+        variant: 'destructive',
+      });
     };
     reader.readAsText(file);
     event.target.value = '';
@@ -278,32 +312,6 @@ export function ProjectManager() {
     URL.revokeObjectURL(url);
   };
 
-  const handleImportJson = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const text = typeof reader.result === 'string' ? reader.result : '';
-        const parsed = parseProjectExport(text);
-        const project = importProjectExport(parsed);
-        setProjects(getStoredProjects());
-        setActiveProjectId(project.id);
-        loadScene(project.elements);
-        toast({
-          title: 'Проект импортирован',
-          description: 'Данные загружены и сохранены в кэше браузера.',
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Не удалось импортировать проект';
-        toast({ title: 'Ошибка', description: message, variant: 'destructive' });
-      } finally {
-        event.target.value = '';
-      }
-    };
-    reader.readAsText(file);
-  };
-
   return (
     <>
       <div className="absolute top-4 right-4 z-20 flex flex-wrap items-center gap-2">
@@ -318,15 +326,6 @@ export function ProjectManager() {
           />
         ) : null}
         <Button 
-          variant="secondary" 
-          size="sm" 
-          onClick={() => setIsOpen(true)}
-          className="shadow-lg"
-        >
-          <FolderOpen className="w-4 h-4 mr-2" />
-          Проекты
-        </Button>
-        <Button 
           size="sm" 
           onClick={handleSave}
           className="shadow-lg"
@@ -336,43 +335,40 @@ export function ProjectManager() {
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button size="sm" variant="secondary" className="shadow-lg">
-              Экспорт/импорт
-              <ChevronDown className="w-4 h-4 ml-2" />
+            <Button
+              size="sm"
+              variant="secondary"
+              className="shadow-lg"
+              aria-label="Меню проектов"
+            >
+              <Menu className="w-4 h-4" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => setIsOpen(true)}>
+              <FolderOpen className="w-4 h-4 mr-2" />
+              Проекты
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={handleExportJson}>
               <FileJson className="w-4 h-4 mr-2" />
               Экспорт JSON
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => jsonInputRef.current?.click()}>
-              <Upload className="w-4 h-4 mr-2" />
-              Импорт JSON
             </DropdownMenuItem>
             <DropdownMenuItem onClick={handleExportObj}>
               <Download className="w-4 h-4 mr-2" />
               Экспорт OBJ
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
+            <DropdownMenuItem onClick={() => importInputRef.current?.click()}>
               <Upload className="w-4 h-4 mr-2" />
-              Импорт OBJ
+              Импорт
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
         <input
-          ref={fileInputRef}
+          ref={importInputRef}
           type="file"
-          accept=".obj"
+          accept=".obj,application/json,.json"
           className="hidden"
-          onChange={handleImportObj}
-        />
-        <input
-          ref={jsonInputRef}
-          type="file"
-          accept="application/json,.json"
-          className="hidden"
-          onChange={handleImportJson}
+          onChange={handleImportFile}
         />
       </div>
 
