@@ -70,7 +70,7 @@ export default function Editor() {
             <div className="w-full h-full flex items-center justify-center bg-[#111]">
               <div className="flex flex-col items-center gap-2 text-muted-foreground">
                 <Loader2 className="w-8 h-8 animate-spin" />
-                <span>Loading Scene...</span>
+                <span>Загрузка сцены...</span>
               </div>
             </div>
           }>

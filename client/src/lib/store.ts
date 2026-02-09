@@ -13,6 +13,18 @@ export type ElementType =
   | 'mesh';
 export type TransformMode = 'translate' | 'rotate' | 'scale';
 
+export const ELEMENT_LABELS: Record<ElementType, string> = {
+  box: 'Куб',
+  sphere: 'Сфера',
+  cylinder: 'Цилиндр',
+  torus: 'Тор',
+  cone: 'Конус',
+  pyramid: 'Пирамида',
+  group: 'Группа',
+  subtraction: 'Вычитание',
+  mesh: 'Меш',
+};
+
 export interface SceneElement {
   id: string;
   name: string;
@@ -130,6 +142,101 @@ const collectDescendantIds = (elements: Record<string, SceneElement>, rootIds: s
   return [...collected];
 };
 
+const getWorldTransform = (elements: Record<string, SceneElement>, element: SceneElement) => {
+  let position: [number, number, number] = [...element.position];
+  let rotation: [number, number, number] = [...element.rotation];
+  let scale: [number, number, number] = [...element.scale];
+  let currentParentId = element.parentId;
+
+  while (currentParentId) {
+    const parent = elements[currentParentId];
+    if (!parent) break;
+    position = [
+      position[0] * parent.scale[0] + parent.position[0],
+      position[1] * parent.scale[1] + parent.position[1],
+      position[2] * parent.scale[2] + parent.position[2],
+    ];
+    rotation = [
+      rotation[0] + parent.rotation[0],
+      rotation[1] + parent.rotation[1],
+      rotation[2] + parent.rotation[2],
+    ];
+    scale = [
+      scale[0] * parent.scale[0],
+      scale[1] * parent.scale[1],
+      scale[2] * parent.scale[2],
+    ];
+    currentParentId = parent.parentId;
+  }
+
+  return { position, rotation, scale };
+};
+
+const getElementHalfSize = (element: SceneElement): [number, number, number] => {
+  switch (element.type) {
+    case 'box':
+      return [0.5, 0.5, 0.5];
+    case 'sphere':
+      return [1, 1, 1];
+    case 'cylinder':
+      return [1, 1, 1];
+    case 'torus': {
+      const tube = Math.max(0.05, Math.min(element.torusThickness ?? 0.3, 0.95));
+      const radius = 1;
+      return [radius + tube, tube, radius + tube];
+    }
+    case 'cone':
+    case 'pyramid':
+      return [1, 0.7, 1];
+    case 'mesh':
+      return [0.5, 0.5, 0.5];
+    default:
+      return [0, 0, 0];
+  }
+};
+
+const getSelectionCenter = (
+  elements: Record<string, SceneElement>,
+  ids: string[],
+  includeDescendants: boolean
+) => {
+  const idsForBounds = includeDescendants ? collectDescendantIds(elements, ids) : ids;
+  let min: [number, number, number] = [Infinity, Infinity, Infinity];
+  let max: [number, number, number] = [-Infinity, -Infinity, -Infinity];
+
+  idsForBounds.forEach((id) => {
+    const element = elements[id];
+    if (!element || element.type === 'group' || element.type === 'subtraction') return;
+    const { position, scale } = getWorldTransform(elements, element);
+    const [halfX, halfY, halfZ] = getElementHalfSize(element);
+    const scaledHalf: [number, number, number] = [
+      halfX * scale[0],
+      halfY * scale[1],
+      halfZ * scale[2],
+    ];
+    min = [
+      Math.min(min[0], position[0] - scaledHalf[0]),
+      Math.min(min[1], position[1] - scaledHalf[1]),
+      Math.min(min[2], position[2] - scaledHalf[2]),
+    ];
+    max = [
+      Math.max(max[0], position[0] + scaledHalf[0]),
+      Math.max(max[1], position[1] + scaledHalf[1]),
+      Math.max(max[2], position[2] + scaledHalf[2]),
+    ];
+  });
+
+  if (!Number.isFinite(min[0])) {
+    return [0, 0, 0] as [number, number, number];
+  }
+
+  return [
+    (min[0] + max[0]) / 2,
+    (min[1] + max[1]) / 2,
+    (min[2] + max[2]) / 2,
+  ] as [number, number, number];
+};
+
 const cloneElement = (element: SceneElement): SceneElement => ({
   ...element,
   position: [...element.position] as [number, number, number],
@@ -187,7 +294,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const id = uuidv4();
     const newElement: SceneElement = {
       id,
-      name: `${type.charAt(0).toUpperCase() + type.slice(1)} ${Object.keys(get().elements).length + 1}`,
+      name: `${ELEMENT_LABELS[type]} ${Object.keys(get().elements).length + 1}`,
       type,
       order: getNextOrder(get().elements),
       ...DEFAULT_ELEMENT_PROPS,
@@ -257,26 +364,37 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const selectedIds = state.selection;
     if (selectedIds.length < 2) return;
 
+    const center = getSelectionCenter(state.elements, selectedIds, true);
     const groupId = uuidv4();
     const group: SceneElement = {
       id: groupId,
-      name: `Group ${Object.keys(state.elements).length + 1}`,
+      name: `${ELEMENT_LABELS.group} ${Object.keys(state.elements).length + 1}`,
       type: 'group',
       order: getNextOrder(state.elements),
       ...DEFAULT_ELEMENT_PROPS,
+      position: center,
       children: selectedIds,
     };
 
-    // Calculate center of selection to position group? 
-    // For simplicity, group at 0,0,0, but logically parenthood is key.
-    
     set((state) => {
       const updatedElements = { ...state.elements };
       
       // Update children to point to parent
       selectedIds.forEach(id => {
-        if (updatedElements[id]) {
-          updatedElements[id] = { ...updatedElements[id], parentId: groupId };
+        const element = updatedElements[id];
+        if (element) {
+          const { position, rotation, scale } = getWorldTransform(state.elements, element);
+          updatedElements[id] = {
+            ...element,
+            parentId: groupId,
+            position: [
+              position[0] - center[0],
+              position[1] - center[1],
+              position[2] - center[2],
+            ],
+            rotation,
+            scale,
+          };
         }
       });
       
@@ -301,8 +419,16 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         const group = updatedElements[groupId];
         if (group && group.type === 'group' && group.children) {
           group.children.forEach(childId => {
-            if (updatedElements[childId]) {
-              updatedElements[childId] = { ...updatedElements[childId], parentId: undefined };
+            const child = updatedElements[childId];
+            if (child) {
+              const { position, rotation, scale } = getWorldTransform(state.elements, child);
+              updatedElements[childId] = {
+                ...child,
+                parentId: undefined,
+                position,
+                rotation,
+                scale,
+              };
               newSelection.push(childId);
             }
           });
@@ -336,15 +462,17 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       return orderA - orderB;
     });
     const [idA, idB] = orderedSelection;
+    const center = getSelectionCenter(state.elements, [idA, idB], false);
     const csgId = uuidv4();
     
     // CSG Element acts as a container that tells the renderer to subtract B from A
     const csgElement: SceneElement = {
       id: csgId,
-      name: `Subtraction ${Object.keys(state.elements).length + 1}`,
+      name: `${ELEMENT_LABELS.subtraction} ${Object.keys(state.elements).length + 1}`,
       type: 'subtraction',
       order: getNextOrder(state.elements),
       ...DEFAULT_ELEMENT_PROPS,
+      position: center,
       children: [idA, idB], // Order matters: A - B
     };
     
@@ -353,8 +481,20 @@ export const useEditorStore = create<EditorState>((set, get) => ({
        
        // Parent the operands to the CSG object
        [idA, idB].forEach(id => {
-         if (updatedElements[id]) {
-           updatedElements[id] = { ...updatedElements[id], parentId: csgId };
+         const element = updatedElements[id];
+         if (element) {
+           const { position, rotation, scale } = getWorldTransform(state.elements, element);
+           updatedElements[id] = {
+             ...element,
+             parentId: csgId,
+             position: [
+               position[0] - center[0],
+               position[1] - center[1],
+               position[2] - center[2],
+             ],
+             rotation,
+             scale,
+           };
          }
        });
        

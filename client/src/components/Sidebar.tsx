@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useEditorStore, type SceneElement } from '@/lib/store';
+import { ELEMENT_LABELS, useEditorStore, type SceneElement } from '@/lib/store';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -67,6 +67,7 @@ export function Sidebar() {
     const childElements = childrenByParent.get(el.id) ?? [];
     const hasChildren = childElements.length > 0;
     const isCollapsed = collapsedIds.has(el.id);
+    const typeLabel = ELEMENT_LABELS[el.type] ?? el.type;
 
     return (
       <div key={el.id}>
@@ -136,7 +137,7 @@ export function Sidebar() {
           <Cuboid className="w-3.5 h-3.5 opacity-70" />
           <span className="truncate flex-1">{el.name}</span>
           <span className="text-[10px] uppercase text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-            {el.type}
+            {typeLabel}
           </span>
         </div>
         {hasChildren && !isCollapsed && (
@@ -154,14 +155,14 @@ export function Sidebar() {
       <div className="flex-1 flex flex-col min-h-0">
         <div className="p-4 border-b">
           <h3 className="font-semibold text-sm flex items-center gap-2">
-            <Layers className="w-4 h-4" /> Scene Graph
+            <Layers className="w-4 h-4" /> Граф сцены
           </h3>
         </div>
         <ScrollArea className="flex-1 p-2">
           <div className="space-y-1">
             {rootElements.length === 0 && (
               <p className="text-xs text-muted-foreground text-center py-8">
-                Scene is empty. Add objects from the toolbar.
+                Сцена пуста. Добавьте объекты с панели инструментов.
               </p>
             )}
             {rootElements.map((el) => renderElementRow(el, 0))}
@@ -172,7 +173,7 @@ export function Sidebar() {
       {/* Properties Panel */}
       <div className="h-1/2 border-t bg-card/50 flex flex-col">
         <div className="p-4 border-b flex justify-between items-center">
-          <h3 className="font-semibold text-sm">Properties</h3>
+          <h3 className="font-semibold text-sm">Свойства</h3>
           {selectedId && (
             <Button 
               variant="destructive" 
@@ -188,12 +189,12 @@ export function Sidebar() {
         <ScrollArea className="flex-1 p-4">
           {!selectedElement ? (
             <div className="text-xs text-muted-foreground text-center py-8">
-              Select an object to edit properties
+              Выберите объект для редактирования свойств
             </div>
           ) : (
             <div className="space-y-6">
               <div className="space-y-2">
-                <Label className="text-xs uppercase text-muted-foreground">Name</Label>
+                <Label className="text-xs uppercase text-muted-foreground">Имя</Label>
                 <Input 
                   value={selectedElement.name} 
                   onChange={(e) => updateElement(selectedElement.id, { name: e.target.value })}
@@ -202,7 +203,7 @@ export function Sidebar() {
               </div>
 
               <div className="space-y-3">
-                <Label className="text-xs uppercase text-muted-foreground">Position</Label>
+                <Label className="text-xs uppercase text-muted-foreground">Позиция</Label>
                 <div className="grid grid-cols-3 gap-2">
                   <PropertyInput 
                     label="X" 
@@ -232,7 +233,7 @@ export function Sidebar() {
               </div>
 
               <div className="space-y-3">
-                <Label className="text-xs uppercase text-muted-foreground">Rotation</Label>
+                <Label className="text-xs uppercase text-muted-foreground">Поворот</Label>
                 <div className="grid grid-cols-3 gap-2">
                   <PropertyInput 
                     label="X" 
@@ -262,7 +263,7 @@ export function Sidebar() {
               </div>
 
               <div className="space-y-3">
-                <Label className="text-xs uppercase text-muted-foreground">Scale</Label>
+                <Label className="text-xs uppercase text-muted-foreground">Масштаб</Label>
                 <div className="grid grid-cols-3 gap-2">
                   <PropertyInput 
                     label="X" 
@@ -293,9 +294,9 @@ export function Sidebar() {
 
               {selectedElement.type === 'box' && (
                 <div className="space-y-3">
-                  <Label className="text-xs uppercase text-muted-foreground">Box</Label>
+                  <Label className="text-xs uppercase text-muted-foreground">Куб</Label>
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs text-muted-foreground">Corner radius</span>
+                    <span className="text-xs text-muted-foreground">Скругление углов</span>
                     <Input
                       type="number"
                       step={0.05}
@@ -316,9 +317,9 @@ export function Sidebar() {
 
               {selectedElement.type === 'torus' && (
                 <div className="space-y-3">
-                  <Label className="text-xs uppercase text-muted-foreground">Torus</Label>
+                  <Label className="text-xs uppercase text-muted-foreground">Тор</Label>
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs text-muted-foreground">Thickness</span>
+                    <span className="text-xs text-muted-foreground">Толщина</span>
                     <Input
                       type="number"
                       step={0.05}
@@ -335,7 +336,7 @@ export function Sidebar() {
               )}
               
               <div className="space-y-2">
-                <Label className="text-xs uppercase text-muted-foreground">Color</Label>
+                <Label className="text-xs uppercase text-muted-foreground">Цвет</Label>
                 <div className="flex gap-2">
                   <input 
                     type="color" 

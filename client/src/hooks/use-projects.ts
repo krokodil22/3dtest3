@@ -9,7 +9,7 @@ export function useProjects() {
     queryKey: [api.projects.list.path],
     queryFn: async () => {
       const res = await fetch(api.projects.list.path);
-      if (!res.ok) throw new Error("Failed to fetch projects");
+      if (!res.ok) throw new Error("Не удалось загрузить проекты");
       return api.projects.list.responses[200].parse(await res.json());
     },
   });
@@ -24,7 +24,7 @@ export function useProject(id: number | null) {
       const url = buildUrl(api.projects.get.path, { id });
       const res = await fetch(url);
       if (res.status === 404) return null;
-      if (!res.ok) throw new Error("Failed to fetch project");
+      if (!res.ok) throw new Error("Не удалось загрузить проект");
       return api.projects.get.responses[200].parse(await res.json());
     },
   });
@@ -45,19 +45,19 @@ export function useCreateProject() {
       if (!res.ok) {
         if (res.status === 400) {
           const error = await res.json();
-          throw new Error(error.message || "Validation failed");
+          throw new Error(error.message || "Ошибка валидации");
         }
-        throw new Error("Failed to create project");
+        throw new Error("Не удалось создать проект");
       }
       return api.projects.create.responses[201].parse(await res.json());
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.projects.list.path] });
-      toast({ title: "Project created", description: "Start building your scene!" });
+      toast({ title: "Проект создан", description: "Можно начинать работу со сценой." });
     },
     onError: (error) => {
       toast({ 
-        title: "Error", 
+        title: "Ошибка", 
         description: error.message, 
         variant: "destructive" 
       });
@@ -78,13 +78,13 @@ export function useUpdateProject() {
         body: JSON.stringify(updates),
       });
 
-      if (!res.ok) throw new Error("Failed to update project");
+      if (!res.ok) throw new Error("Не удалось обновить проект");
       return api.projects.update.responses[200].parse(await res.json());
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: [api.projects.list.path] });
       queryClient.invalidateQueries({ queryKey: [api.projects.get.path, data.id] });
-      toast({ title: "Saved", description: "Project changes saved successfully." });
+      toast({ title: "Сохранено", description: "Изменения проекта успешно сохранены." });
     },
   });
 }
@@ -97,11 +97,11 @@ export function useDeleteProject() {
     mutationFn: async (id: number) => {
       const url = buildUrl(api.projects.delete.path, { id });
       const res = await fetch(url, { method: api.projects.delete.method });
-      if (!res.ok) throw new Error("Failed to delete project");
+      if (!res.ok) throw new Error("Не удалось удалить проект");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.projects.list.path] });
-      toast({ title: "Deleted", description: "Project has been removed." });
+      toast({ title: "Удалено", description: "Проект удален." });
     },
   });
 }

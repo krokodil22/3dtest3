@@ -177,7 +177,7 @@ export function ProjectManager() {
     reader.onload = () => {
       const text = typeof reader.result === 'string' ? reader.result : '';
       if (!text) return;
-      const name = file.name.replace(/\.obj$/i, '') || 'Imported OBJ';
+      const name = file.name.replace(/\.obj$/i, '') || 'Импорт OBJ';
       addObjElement(name, text);
     };
     reader.readAsText(file);
@@ -194,7 +194,7 @@ export function ProjectManager() {
           className="shadow-lg"
         >
           <FolderOpen className="w-4 h-4 mr-2" />
-          Projects
+          Проекты
         </Button>
         <Button 
           size="sm" 
@@ -207,7 +207,7 @@ export function ProjectManager() {
           ) : (
             <Save className="w-4 h-4 mr-2" />
           )}
-          Save
+          Сохранить
         </Button>
         <Button
           size="sm"
@@ -216,7 +216,7 @@ export function ProjectManager() {
           className="shadow-lg"
         >
           <Download className="w-4 h-4 mr-2" />
-          Export OBJ
+          Экспорт OBJ
         </Button>
         <Button
           size="sm"
@@ -225,7 +225,7 @@ export function ProjectManager() {
           className="shadow-lg"
         >
           <Upload className="w-4 h-4 mr-2" />
-          Import OBJ
+          Импорт OBJ
         </Button>
         <input
           ref={fileInputRef}
@@ -239,12 +239,12 @@ export function ProjectManager() {
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Projects</DialogTitle>
+            <DialogTitle>Проекты</DialogTitle>
           </DialogHeader>
           
           <div className="flex gap-2 my-2">
             <Input 
-              placeholder="New project name..." 
+              placeholder="Название проекта..." 
               value={newProjectName}
               onChange={(e) => setNewProjectName(e.target.value)}
             />
@@ -260,7 +260,7 @@ export function ProjectManager() {
               </div>
             ) : projects?.length === 0 ? (
                <div className="text-center text-muted-foreground p-4">
-                 No projects yet. Create one!
+                 Проектов пока нет. Создайте первый!
                </div>
             ) : (
               <div className="space-y-2">

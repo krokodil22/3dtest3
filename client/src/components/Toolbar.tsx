@@ -73,35 +73,35 @@ export function Toolbar() {
     );
 
   const transformTools = [
-    { mode: 'translate', icon: Move, label: 'Move (G)' },
-    { mode: 'rotate', icon: RotateCw, label: 'Rotate (R)' },
-    { mode: 'scale', icon: Maximize, label: 'Scale (S)' },
+    { mode: 'translate', icon: Move, label: 'Перемещение (G)' },
+    { mode: 'rotate', icon: RotateCw, label: 'Поворот (R)' },
+    { mode: 'scale', icon: Maximize, label: 'Масштаб (S)' },
   ];
 
   const tools = [
-    { label: 'Box', icon: Box, action: () => addElement('box') },
-    { label: 'Sphere', icon: Circle, action: () => addElement('sphere') },
-    { label: 'Cylinder', icon: Cylinder, action: () => addElement('cylinder') },
-    { label: 'Torus', icon: TorusIcon, action: () => addElement('torus') },
-    { label: 'Cone', icon: ConeIcon, action: () => addElement('cone') },
-    { label: 'Pyramid', icon: PyramidIcon, action: () => addElement('pyramid') },
+    { label: 'Куб', icon: Box, action: () => addElement('box') },
+    { label: 'Сфера', icon: Circle, action: () => addElement('sphere') },
+    { label: 'Цилиндр', icon: Cylinder, action: () => addElement('cylinder') },
+    { label: 'Тор', icon: TorusIcon, action: () => addElement('torus') },
+    { label: 'Конус', icon: ConeIcon, action: () => addElement('cone') },
+    { label: 'Пирамида', icon: PyramidIcon, action: () => addElement('pyramid') },
   ];
 
   const operations = [
     { 
-      label: 'Group', 
+      label: 'Группировать', 
       icon: Group, 
       action: groupSelection, 
       disabled: !canGroup 
     },
     { 
-      label: 'Ungroup', 
+      label: 'Разгруппировать', 
       icon: Ungroup, 
       action: ungroupSelection, 
       disabled: !canUngroup 
     },
     { 
-      label: 'Subtract (A - B)', 
+      label: 'Вычитание (A - B)', 
       icon: Combine, 
       action: subtractSelection, 
       disabled: !canSubtract 
@@ -148,7 +148,7 @@ export function Toolbar() {
                 <Undo2 className="w-5 h-5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Undo (Ctrl+Z)</TooltipContent>
+            <TooltipContent>Отменить (Ctrl+Z)</TooltipContent>
           </Tooltip>
         </div>
 
