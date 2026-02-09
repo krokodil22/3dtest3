@@ -110,6 +110,14 @@ export const updateStoredProjectName = (id: string, name: string): StoredProject
   return updated;
 };
 
+export const removeStoredProject = (id: string): boolean => {
+  const projects = readProjects();
+  const next = projects.filter((project) => project.id !== id);
+  if (next.length === projects.length) return false;
+  writeProjects(next);
+  return true;
+};
+
 export const buildProjectExport = (project: {
   name: string;
   elements: Record<string, SceneElement>;
