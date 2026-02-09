@@ -299,70 +299,74 @@ const RecursiveElement = ({ id }: { id: string }) => {
   );
 
   if (element.type === 'subtraction') {
-      // Expect exactly 2 children for subtraction for now
-      if (childIds.length !== 2) return null;
-      const [baseId, subId] = childIds;
-      const baseEl = allElements[baseId];
-      const subEl = allElements[subId];
+    // Expect exactly 2 children for subtraction for now
+    if (childIds.length !== 2) return null;
+    const [baseId, subId] = childIds;
+    const baseEl = allElements[baseId];
+    const subEl = allElements[subId];
 
-      return (
+    return (
+      <>
         <group {...commonProps}>
-          {isSelected && (
-             <TransformControls 
-               mode={transformMode} 
-               onMouseDown={handleTransformStart}
-               onChange={handleTransformChange}
-               onMouseUp={handleTransformEnd}
-               position={gizmoPosition}
-               rotation={element.rotation}
-               scale={element.scale}
-             />
-          )}
-          {isSelected && isTransforming && <GhostPreview />}
           <mesh visible={!isTransforming}>
-             <Geometry>
-                <Base 
-                  position={baseEl.position} 
-                  rotation={baseEl.rotation} 
-                  scale={baseEl.scale}
-                >
-                  {renderGeometry(baseEl)}
-                </Base>
-                <Subtraction 
-                  position={subEl.position} 
-                  rotation={subEl.rotation} 
-                  scale={subEl.scale}
-                >
-                  {renderGeometry(subEl)}
-                </Subtraction>
-             </Geometry>
-             <Material color={baseEl.color} isSelected={isSelected} />
+            <Geometry>
+              <Base 
+                position={baseEl.position} 
+                rotation={baseEl.rotation} 
+                scale={baseEl.scale}
+              >
+                {renderGeometry(baseEl)}
+              </Base>
+              <Subtraction 
+                position={subEl.position} 
+                rotation={subEl.rotation} 
+                scale={subEl.scale}
+              >
+                {renderGeometry(subEl)}
+              </Subtraction>
+            </Geometry>
+            <Material color={baseEl.color} isSelected={isSelected} />
           </mesh>
         </group>
-      );
+        {isSelected && (
+          <TransformControls 
+            mode={transformMode} 
+            onMouseDown={handleTransformStart}
+            onChange={handleTransformChange}
+            onMouseUp={handleTransformEnd}
+            position={gizmoPosition}
+            rotation={element.rotation}
+            scale={element.scale}
+          />
+        )}
+        {isSelected && isTransforming && <GhostPreview />}
+      </>
+    );
   }
   
   if (element.type === 'group') {
     return (
-      <group {...commonProps}>
+      <>
+        <group {...commonProps}>
+          <group visible={!isTransforming}>
+            {childIds.map(childId => (
+              <RecursiveElement key={childId} id={childId} />
+            ))}
+          </group>
+        </group>
         {isSelected && (
-           <TransformControls 
-             mode={transformMode} 
-             onMouseDown={handleTransformStart}
-             onChange={handleTransformChange}
-             onMouseUp={handleTransformEnd}
-             position={gizmoPosition}
-             rotation={element.rotation}
-             scale={element.scale}
-           />
+          <TransformControls 
+            mode={transformMode} 
+            onMouseDown={handleTransformStart}
+            onChange={handleTransformChange}
+            onMouseUp={handleTransformEnd}
+            position={gizmoPosition}
+            rotation={element.rotation}
+            scale={element.scale}
+          />
         )}
         {isSelected && isTransforming && <GhostPreview />}
-        <group visible={!isTransforming}>
-          {childIds.map(childId => (
-            <RecursiveElement key={childId} id={childId} />
-          ))}
-        </group>
-      </group>
+      </>
     );
   }
 
