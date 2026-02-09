@@ -21,6 +21,41 @@ const Material = ({ color, isSelected, opacity = 1 }: { color: string, isSelecte
   />
 );
 
+const createHeartShape = () => {
+  const shape = new THREE.Shape();
+  const x = 0;
+  const y = 0;
+  shape.moveTo(x + 0.25, y + 0.25);
+  shape.bezierCurveTo(x + 0.25, y + 0.25, x, y, x - 0.5, y);
+  shape.bezierCurveTo(x - 1.2, y, x - 1.2, y + 0.7, x - 1.2, y + 0.7);
+  shape.bezierCurveTo(x - 1.2, y + 1.1, x - 0.8, y + 1.5, x - 0.25, y + 1.75);
+  shape.bezierCurveTo(x + 0.25, y + 1.95, x + 0.6, y + 1.7, x + 0.8, y + 1.4);
+  shape.bezierCurveTo(x + 1.0, y + 1.5, x + 1.4, y + 1.1, x + 1.4, y + 0.7);
+  shape.bezierCurveTo(x + 1.4, y + 0.7, x + 1.4, y, x + 0.75, y);
+  shape.bezierCurveTo(x + 0.35, y, x + 0.25, y + 0.25, x + 0.25, y + 0.25);
+  return shape;
+};
+
+const createStarShape = (points = 5, outerRadius = 1, innerRadius = 0.5) => {
+  const shape = new THREE.Shape();
+  const step = Math.PI / points;
+
+  for (let i = 0; i < points * 2; i += 1) {
+    const radius = i % 2 === 0 ? outerRadius : innerRadius;
+    const angle = i * step - Math.PI / 2;
+    const x = Math.cos(angle) * radius;
+    const y = Math.sin(angle) * radius;
+    if (i === 0) {
+      shape.moveTo(x, y);
+    } else {
+      shape.lineTo(x, y);
+    }
+  }
+
+  shape.closePath();
+  return shape;
+};
+
 const ElementRenderer = ({ id }: { id: string }) => {
   const element = useEditorStore(state => state.elements[id]);
   const selection = useEditorStore(state => state.selection);
@@ -96,6 +131,30 @@ const RecursiveElement = ({ id, inheritedOpacity = 1 }: { id: string; inheritedO
     return clone;
   }, [meshObject, element, effectiveOpacity]);
 
+  const extrudeSettings = React.useMemo(
+    () => ({
+      depth: 0.4,
+      bevelEnabled: true,
+      bevelThickness: 0.08,
+      bevelSize: 0.06,
+      bevelSegments: 2,
+      steps: 1,
+    }),
+    []
+  );
+  const heartGeometry = React.useMemo(() => {
+    const geometry = new THREE.ExtrudeGeometry(createHeartShape(), extrudeSettings);
+    geometry.center();
+    geometry.scale(0.8, 0.8, 1);
+    return geometry;
+  }, [extrudeSettings]);
+  const starGeometry = React.useMemo(() => {
+    const geometry = new THREE.ExtrudeGeometry(createStarShape(), extrudeSettings);
+    geometry.center();
+    geometry.scale(0.9, 0.9, 1);
+    return geometry;
+  }, [extrudeSettings]);
+
   const buildBoundingObject = React.useCallback((el: SceneElement): THREE.Object3D | null => {
     switch (el.type) {
       case 'group': {
@@ -138,7 +197,9 @@ const RecursiveElement = ({ id, inheritedOpacity = 1 }: { id: string; inheritedO
       case 'cylinder':
       case 'torus':
       case 'cone':
-      case 'pyramid': {
+      case 'pyramid':
+      case 'heart':
+      case 'star': {
         const geometry = (() => {
           switch (el.type) {
             case 'box': {
@@ -157,6 +218,10 @@ const RecursiveElement = ({ id, inheritedOpacity = 1 }: { id: string; inheritedO
               return new THREE.ConeGeometry(1, 1.4, 32);
             case 'pyramid':
               return new THREE.ConeGeometry(1, 1.4, 4);
+            case 'heart':
+              return heartGeometry.clone();
+            case 'star':
+              return starGeometry.clone();
             default:
               return null;
           }
@@ -167,7 +232,7 @@ const RecursiveElement = ({ id, inheritedOpacity = 1 }: { id: string; inheritedO
       default:
         return null;
     }
-  }, [allElements, element?.id, meshObject]);
+  }, [allElements, element?.id, heartGeometry, meshObject, starGeometry]);
 
   const localCenter = React.useMemo(() => {
     if (!element) return new THREE.Vector3();
@@ -300,6 +365,10 @@ const RecursiveElement = ({ id, inheritedOpacity = 1 }: { id: string; inheritedO
         return <coneGeometry args={[1, 1.4, 32]} />;
       case 'pyramid':
         return <coneGeometry args={[1, 1.4, 4]} />;
+      case 'heart':
+        return <primitive object={heartGeometry} attach="geometry" />;
+      case 'star':
+        return <primitive object={starGeometry} attach="geometry" />;
       case 'mesh': return null;
       default: return null;
     }
@@ -323,10 +392,14 @@ const RecursiveElement = ({ id, inheritedOpacity = 1 }: { id: string; inheritedO
         return new THREE.ConeGeometry(1, 1.4, 32);
       case 'pyramid':
         return new THREE.ConeGeometry(1, 1.4, 4);
+      case 'heart':
+        return heartGeometry.clone();
+      case 'star':
+        return starGeometry.clone();
       default:
         return null;
     }
-  }, []);
+  }, [heartGeometry, starGeometry]);
 
   const buildGhostObject = React.useCallback((el: SceneElement): THREE.Object3D | null => {
     switch (el.type) {
@@ -387,7 +460,9 @@ const RecursiveElement = ({ id, inheritedOpacity = 1 }: { id: string; inheritedO
       case 'cylinder':
       case 'torus':
       case 'cone':
-      case 'pyramid': {
+      case 'pyramid':
+      case 'heart':
+      case 'star': {
         const geometry = buildGeometry(el);
         if (!geometry) return null;
         return new THREE.Mesh(

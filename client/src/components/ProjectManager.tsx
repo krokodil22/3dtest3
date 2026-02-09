@@ -49,6 +49,55 @@ const formatRelativeTime = (timestamp: string, now: Date) => {
   return `${diffYears} г назад`;
 };
 
+const createHeartShape = () => {
+  const shape = new THREE.Shape();
+  const x = 0;
+  const y = 0;
+  shape.moveTo(x + 0.25, y + 0.25);
+  shape.bezierCurveTo(x + 0.25, y + 0.25, x, y, x - 0.5, y);
+  shape.bezierCurveTo(x - 1.2, y, x - 1.2, y + 0.7, x - 1.2, y + 0.7);
+  shape.bezierCurveTo(x - 1.2, y + 1.1, x - 0.8, y + 1.5, x - 0.25, y + 1.75);
+  shape.bezierCurveTo(x + 0.25, y + 1.95, x + 0.6, y + 1.7, x + 0.8, y + 1.4);
+  shape.bezierCurveTo(x + 1.0, y + 1.5, x + 1.4, y + 1.1, x + 1.4, y + 0.7);
+  shape.bezierCurveTo(x + 1.4, y + 0.7, x + 1.4, y, x + 0.75, y);
+  shape.bezierCurveTo(x + 0.35, y, x + 0.25, y + 0.25, x + 0.25, y + 0.25);
+  return shape;
+};
+
+const createStarShape = (points = 5, outerRadius = 1, innerRadius = 0.5) => {
+  const shape = new THREE.Shape();
+  const step = Math.PI / points;
+
+  for (let i = 0; i < points * 2; i += 1) {
+    const radius = i % 2 === 0 ? outerRadius : innerRadius;
+    const angle = i * step - Math.PI / 2;
+    const x = Math.cos(angle) * radius;
+    const y = Math.sin(angle) * radius;
+    if (i === 0) {
+      shape.moveTo(x, y);
+    } else {
+      shape.lineTo(x, y);
+    }
+  }
+
+  shape.closePath();
+  return shape;
+};
+
+const createExtrudedGeometry = (shape: THREE.Shape, scale = 0.5) => {
+  const geometry = new THREE.ExtrudeGeometry(shape, {
+    depth: 0.4,
+    bevelEnabled: true,
+    bevelThickness: 0.08,
+    bevelSize: 0.06,
+    bevelSegments: 2,
+    steps: 1,
+  });
+  geometry.center();
+  geometry.scale(scale, scale, scale);
+  return geometry;
+};
+
 export function ProjectManager() {
   const [isOpen, setIsOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
@@ -176,6 +225,12 @@ export function ProjectManager() {
           break;
         case 'pyramid':
           object = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.4, 4), material);
+          break;
+        case 'heart':
+          object = new THREE.Mesh(createExtrudedGeometry(createHeartShape()), material);
+          break;
+        case 'star':
+          object = new THREE.Mesh(createExtrudedGeometry(createStarShape()), material);
           break;
         case 'mesh': {
           if (!element.objData) {
