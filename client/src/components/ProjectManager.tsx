@@ -7,6 +7,7 @@ import {
   getStoredProjects,
   importProjectExport,
   parseProjectExport,
+  removeStoredProject,
   updateStoredProject,
   updateStoredProjectName,
   type StoredProject,
@@ -22,11 +23,31 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Download, FileJson, FolderOpen, Menu, Plus, Save, Upload } from 'lucide-react';
+import { Download, FileJson, FolderOpen, Menu, Plus, Save, Trash2, Upload } from 'lucide-react';
 import * as THREE from 'three';
 import { OBJExporter } from 'three/examples/jsm/exporters/OBJExporter.js';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
+
+const formatRelativeTime = (timestamp: string, now: Date) => {
+  const updatedAt = new Date(timestamp);
+  const diffMs = now.getTime() - updatedAt.getTime();
+  if (Number.isNaN(diffMs)) return 'только что';
+  const diffSeconds = Math.max(0, Math.floor(diffMs / 1000));
+  if (diffSeconds < 60) return 'только что';
+  const diffMinutes = Math.floor(diffSeconds / 60);
+  if (diffMinutes < 60) return `${diffMinutes} мин назад`;
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours} ч назад`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays} дн назад`;
+  const diffWeeks = Math.floor(diffDays / 7);
+  if (diffWeeks < 5) return `${diffWeeks} нед назад`;
+  const diffMonths = Math.floor(diffDays / 30);
+  if (diffMonths < 12) return `${diffMonths} мес назад`;
+  const diffYears = Math.floor(diffDays / 365);
+  return `${diffYears} г назад`;
+};
 
 export function ProjectManager() {
   const [isOpen, setIsOpen] = useState(false);
@@ -35,6 +56,7 @@ export function ProjectManager() {
   const [projects, setProjects] = useState<StoredProject[]>([]);
   const [projectName, setProjectName] = useState('');
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(false);
+  const [now, setNow] = useState(() => new Date());
   
   const elements = useEditorStore(state => state.elements);
   const loadScene = useEditorStore(state => state.loadScene);
@@ -69,6 +91,13 @@ export function ProjectManager() {
   useEffect(() => {
     setProjectName(activeProject?.name ?? '');
   }, [activeProject?.name]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setNow(new Date());
+    }, 60000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     if (!activeProjectId || !autoSaveEnabled) return;
@@ -222,6 +251,24 @@ export function ProjectManager() {
     }
   };
 
+  const handleDeleteProject = (project: StoredProject) => {
+    const shouldDelete = window.confirm(`Удалить проект "${project.name}"?`);
+    if (!shouldDelete) return;
+    const removed = removeStoredProject(project.id);
+    if (!removed) {
+      toast({ title: 'Ошибка', description: 'Проект не найден.', variant: 'destructive' });
+      return;
+    }
+    const nextProjects = getStoredProjects();
+    setProjects(nextProjects);
+    if (activeProjectId === project.id) {
+      setActiveProjectId(null);
+      resetScene();
+      setAutoSaveEnabled(false);
+    }
+    toast({ title: 'Проект удален', description: 'Проект удален из кэша браузера.' });
+  };
+
   const handleLoad = (project: StoredProject) => {
     if (activeProjectId && activeProjectId !== project.id) {
       const updated = updateStoredProject(activeProjectId, elements);
@@ -322,64 +369,74 @@ export function ProjectManager() {
     URL.revokeObjectURL(url);
   };
 
+  const lastSavedLabel = useMemo(() => {
+    if (!activeProject?.updatedAt) return null;
+    return `Последнее сохранение: ${formatRelativeTime(activeProject.updatedAt, now)}`;
+  }, [activeProject?.updatedAt, now]);
+
   return (
     <>
-      <div className="absolute top-4 right-4 z-20 flex flex-wrap items-center gap-2">
-        {activeProject ? (
-          <Input
-            value={projectName}
-            onChange={(event) => setProjectName(event.target.value)}
-            onBlur={handleProjectNameCommit}
-            onKeyDown={handleProjectNameKeyDown}
-            className="h-9 w-48 bg-background/80 shadow-lg"
-            aria-label="Название проекта"
+      <div className="absolute top-4 right-4 z-20 flex flex-col items-end gap-1">
+        <div className="flex flex-wrap items-center gap-2">
+          {activeProject ? (
+            <Input
+              value={projectName}
+              onChange={(event) => setProjectName(event.target.value)}
+              onBlur={handleProjectNameCommit}
+              onKeyDown={handleProjectNameKeyDown}
+              className="h-9 w-48 bg-background/80 shadow-lg"
+              aria-label="Название проекта"
+            />
+          ) : null}
+          <Button 
+            size="sm" 
+            onClick={handleSave}
+            className="shadow-lg"
+          >
+            <Save className="w-4 h-4 mr-2" />
+            Сохранить
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="sm"
+                variant="secondary"
+                className="shadow-lg"
+                aria-label="Меню проектов"
+              >
+                <Menu className="w-4 h-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setIsOpen(true)}>
+                <FolderOpen className="w-4 h-4 mr-2" />
+                Проекты
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportJson}>
+                <FileJson className="w-4 h-4 mr-2" />
+                Экспорт JSON
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportObj}>
+                <Download className="w-4 h-4 mr-2" />
+                Экспорт OBJ
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => importInputRef.current?.click()}>
+                <Upload className="w-4 h-4 mr-2" />
+                Импорт
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".obj,application/json,.json"
+            className="hidden"
+            onChange={handleImportFile}
           />
+        </div>
+        {activeProject && lastSavedLabel ? (
+          <span className="text-xs text-muted-foreground">{lastSavedLabel}</span>
         ) : null}
-        <Button 
-          size="sm" 
-          onClick={handleSave}
-          className="shadow-lg"
-        >
-          <Save className="w-4 h-4 mr-2" />
-          Сохранить
-        </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              size="sm"
-              variant="secondary"
-              className="shadow-lg"
-              aria-label="Меню проектов"
-            >
-              <Menu className="w-4 h-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => setIsOpen(true)}>
-              <FolderOpen className="w-4 h-4 mr-2" />
-              Проекты
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleExportJson}>
-              <FileJson className="w-4 h-4 mr-2" />
-              Экспорт JSON
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleExportObj}>
-              <Download className="w-4 h-4 mr-2" />
-              Экспорт OBJ
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => importInputRef.current?.click()}>
-              <Upload className="w-4 h-4 mr-2" />
-              Импорт
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <input
-          ref={importInputRef}
-          type="file"
-          accept=".obj,application/json,.json"
-          className="hidden"
-          onChange={handleImportFile}
-        />
       </div>
 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -412,10 +469,25 @@ export function ProjectManager() {
                     onClick={() => handleLoad(project)}
                     className="flex items-center justify-between p-3 rounded-lg hover:bg-muted cursor-pointer transition-colors border border-transparent hover:border-border"
                   >
-                    <span className="font-medium">{project.name}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {new Date(project.createdAt).toLocaleDateString()}
-                    </span>
+                    <div className="flex flex-col">
+                      <span className="font-medium">{project.name}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(project.createdAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="h-8 w-8"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleDeleteProject(project);
+                      }}
+                      aria-label={`Удалить проект ${project.name}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
                 ))}
               </div>
