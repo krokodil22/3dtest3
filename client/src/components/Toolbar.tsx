@@ -148,8 +148,15 @@ export function Toolbar() {
   return (
     <div className="h-16 border-b bg-card flex items-center px-4 justify-between shrink-0 z-10 shadow-sm">
       <div className="flex items-center space-x-2">
-        <div className="font-bold text-xl mr-6 bg-gradient-to-r from-primary to-blue-400 bg-clip-text text-transparent">
-          Tetrika 3D
+        <div className="flex items-center gap-2 mr-6">
+          <img
+            src="/tetrika-logo.webp"
+            alt="Tetrika 3D logo"
+            className="h-8 w-8"
+          />
+          <div className="font-bold text-xl text-[#5ECEF6]">
+            Tetrika 3D
+          </div>
         </div>
         
         <div className="flex items-center gap-1">
