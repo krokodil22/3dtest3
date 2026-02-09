@@ -1,6 +1,6 @@
 import { 
   Box, Circle, Cylinder, Combine, 
-  Group, Ungroup, Move, RotateCw, Maximize, Undo2, Redo2, Copy, ClipboardPaste, CopyPlus
+  Group, Ungroup, Move, RotateCw, Maximize, Undo2, Redo2, Copy, ClipboardPaste, CopyPlus, AlignCenter
 } from 'lucide-react';
 import { useEditorStore } from '@/lib/store';
 import { Button } from '@/components/ui/button';
@@ -96,6 +96,8 @@ export function Toolbar() {
   const elements = useEditorStore(state => state.elements);
   const transformMode = useEditorStore(state => state.transformMode);
   const setTransformMode = useEditorStore(state => state.setTransformMode);
+  const alignmentMode = useEditorStore(state => state.alignmentMode);
+  const toggleAlignmentMode = useEditorStore(state => state.toggleAlignmentMode);
 
   const canGroup = selection.length > 1;
   const canUngroup = selection.length > 0; // Simple check
@@ -112,6 +114,7 @@ export function Toolbar() {
     { mode: 'rotate', icon: RotateCw, label: 'Поворот (R)' },
     { mode: 'scale', icon: Maximize, label: 'Масштаб (S)' },
   ];
+  const canAlign = selection.length > 1;
 
   const tools = [
     { label: 'Куб', icon: Box, action: () => addElement('box') },
@@ -252,7 +255,26 @@ export function Toolbar() {
         </div>
 
         <Separator orientation="vertical" className="h-8 mx-2" />
-        
+
+        <div className="flex items-center gap-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={alignmentMode ? "default" : "ghost"}
+                size="icon"
+                onClick={toggleAlignmentMode}
+                disabled={!canAlign}
+                className="hover:bg-accent hover:text-accent-foreground"
+              >
+                <AlignCenter className="w-5 h-5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Выравнивание</TooltipContent>
+          </Tooltip>
+        </div>
+
+        <Separator orientation="vertical" className="h-8 mx-2" />
+
         <div className="flex items-center gap-1">
            {tools.map((tool) => (
              <Tooltip key={tool.label}>

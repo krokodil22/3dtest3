@@ -1,7 +1,7 @@
 import React, { useRef } from 'react';
 import { TransformControls } from '@react-three/drei';
 import { Geometry, Base, Subtraction } from '@react-three/csg';
-import { useEditorStore, type SceneElement } from '@/lib/store';
+import { getSelectionBounds, useEditorStore, type SceneElement } from '@/lib/store';
 import { extend } from '@react-three/fiber';
 import * as THREE from 'three';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
@@ -635,12 +635,44 @@ const RecursiveElement = ({ id, inheritedOpacity = 1 }: { id: string; inheritedO
 export const Scene = () => {
   const elements = useEditorStore(state => state.elements);
   const setSelection = useEditorStore(state => state.setSelection);
+  const selection = useEditorStore(state => state.selection);
+  const alignmentMode = useEditorStore(state => state.alignmentMode);
+  const alignSelection = useEditorStore(state => state.alignSelection);
   
   // Get only root elements (no parent) to start the recursive render
   const rootIds = Object.values(elements)
     .filter(el => !el.parentId)
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
     .map(el => el.id);
+
+  const selectionBounds = React.useMemo(() => {
+    if (!alignmentMode || selection.length < 2) return null;
+    return getSelectionBounds(elements, selection, true);
+  }, [alignmentMode, elements, selection]);
+
+  const alignmentHandles = React.useMemo(() => {
+    if (!selectionBounds) return [];
+    const { min, max, center } = selectionBounds;
+    const handleOffset = 0.2;
+    const axes = [
+      { axis: 'x' as const, index: 0, offset: [0, handleOffset, 0] as [number, number, number] },
+      { axis: 'y' as const, index: 1, offset: [handleOffset, 0, 0] as [number, number, number] },
+      { axis: 'z' as const, index: 2, offset: [0, 0, handleOffset] as [number, number, number] },
+    ];
+    const anchors: Array<'min' | 'center' | 'max'> = ['min', 'center', 'max'];
+
+    return axes.flatMap(({ axis, index, offset }) =>
+      anchors.map((anchor) => {
+        const value = anchor === 'min' ? min[index] : anchor === 'max' ? max[index] : center[index];
+        const position: [number, number, number] = [...center];
+        position[index] = value;
+        position[0] += offset[0];
+        position[1] += offset[1];
+        position[2] += offset[2];
+        return { axis, anchor, position };
+      })
+    );
+  }, [selectionBounds]);
 
   return (
     <>
@@ -663,6 +695,22 @@ export const Scene = () => {
         <planeGeometry args={[100, 100]} />
         <meshBasicMaterial visible={false} />
       </mesh>
+
+      {selectionBounds &&
+        alignmentHandles.map((handle) => (
+          <mesh
+            key={`${handle.axis}-${handle.anchor}`}
+            position={handle.position}
+            onClick={(e) => {
+              e.stopPropagation();
+              alignSelection(handle.axis, handle.anchor);
+            }}
+            castShadow
+          >
+            <sphereGeometry args={[0.08, 16, 16]} />
+            <meshStandardMaterial color="#111827" emissive="#111827" />
+          </mesh>
+        ))}
 
       {rootIds.map(id => (
         <RecursiveElement key={id} id={id} />
