@@ -25,14 +25,13 @@ const createHeartShape = () => {
   const shape = new THREE.Shape();
   const x = 0;
   const y = 0;
-  shape.moveTo(x + 0.25, y + 0.25);
-  shape.bezierCurveTo(x + 0.25, y + 0.25, x, y, x - 0.5, y);
-  shape.bezierCurveTo(x - 1.2, y, x - 1.2, y + 0.7, x - 1.2, y + 0.7);
-  shape.bezierCurveTo(x - 1.2, y + 1.1, x - 0.8, y + 1.5, x - 0.25, y + 1.75);
-  shape.bezierCurveTo(x + 0.25, y + 1.95, x + 0.6, y + 1.7, x + 0.8, y + 1.4);
-  shape.bezierCurveTo(x + 1.0, y + 1.5, x + 1.4, y + 1.1, x + 1.4, y + 0.7);
-  shape.bezierCurveTo(x + 1.4, y + 0.7, x + 1.4, y, x + 0.75, y);
-  shape.bezierCurveTo(x + 0.35, y, x + 0.25, y + 0.25, x + 0.25, y + 0.25);
+  shape.moveTo(x + 0.5, y + 0.5);
+  shape.bezierCurveTo(x + 0.5, y + 0.5, x + 0.4, y, x, y);
+  shape.bezierCurveTo(x - 0.6, y, x - 0.6, y + 0.7, x - 0.6, y + 0.7);
+  shape.bezierCurveTo(x - 0.6, y + 1.1, x - 0.3, y + 1.4, x + 0.5, y + 1.8);
+  shape.bezierCurveTo(x + 1.2, y + 1.4, x + 1.6, y + 1.1, x + 1.6, y + 0.7);
+  shape.bezierCurveTo(x + 1.6, y + 0.7, x + 1.6, y, x + 1.0, y);
+  shape.bezierCurveTo(x + 0.7, y, x + 0.5, y + 0.5, x + 0.5, y + 0.5);
   return shape;
 };
 
