@@ -654,21 +654,31 @@ export const Scene = () => {
     if (!selectionBounds) return [];
     const { min, max, center } = selectionBounds;
     const handleOffset = 0.2;
+    const groundY = min[1];
     const axes = [
-      { axis: 'x' as const, index: 0, offset: [0, handleOffset, 0] as [number, number, number] },
-      { axis: 'y' as const, index: 1, offset: [handleOffset, 0, 0] as [number, number, number] },
-      { axis: 'z' as const, index: 2, offset: [0, 0, handleOffset] as [number, number, number] },
+      {
+        axis: 'x' as const,
+        index: 0,
+        base: [0, groundY, min[2] - handleOffset] as [number, number, number],
+      },
+      {
+        axis: 'z' as const,
+        index: 2,
+        base: [min[0] - handleOffset, groundY, 0] as [number, number, number],
+      },
+      {
+        axis: 'y' as const,
+        index: 1,
+        base: [max[0] + handleOffset, 0, max[2] + handleOffset] as [number, number, number],
+      },
     ];
     const anchors: Array<'min' | 'center' | 'max'> = ['min', 'center', 'max'];
 
-    return axes.flatMap(({ axis, index, offset }) =>
+    return axes.flatMap(({ axis, index, base }) =>
       anchors.map((anchor) => {
         const value = anchor === 'min' ? min[index] : anchor === 'max' ? max[index] : center[index];
-        const position: [number, number, number] = [...center];
+        const position: [number, number, number] = [...base];
         position[index] = value;
-        position[0] += offset[0];
-        position[1] += offset[1];
-        position[2] += offset[2];
         return { axis, anchor, position };
       })
     );
