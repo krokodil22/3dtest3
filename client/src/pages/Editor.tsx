@@ -11,6 +11,8 @@ export default function Editor() {
   const copySelection = useEditorStore(state => state.copySelection);
   const pasteClipboard = useEditorStore(state => state.pasteClipboard);
   const duplicateSelection = useEditorStore(state => state.duplicateSelection);
+  const removeElements = useEditorStore(state => state.removeElements);
+  const selection = useEditorStore(state => state.selection);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -45,12 +47,18 @@ export default function Editor() {
       if ((event.ctrlKey || event.metaKey) && key === 'd') {
         event.preventDefault();
         duplicateSelection();
+        return;
+      }
+
+      if ((key === 'delete' || key === 'backspace') && selection.length > 0) {
+        event.preventDefault();
+        removeElements(selection);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [copySelection, duplicateSelection, pasteClipboard, undo]);
+  }, [copySelection, duplicateSelection, pasteClipboard, removeElements, selection, undo]);
 
   return (
     <div className="h-screen w-screen flex flex-col bg-background text-foreground overflow-hidden">

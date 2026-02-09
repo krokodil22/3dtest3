@@ -1,7 +1,7 @@
 import type { ChangeEvent } from 'react';
 import { useRef, useState } from 'react';
 import { useProjects, useCreateProject, useUpdateProject } from '@/hooks/use-projects';
-import { useEditorStore } from '@/lib/store';
+import { useEditorStore, type SceneElement } from '@/lib/store';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,9 +28,19 @@ export function ProjectManager() {
 
   const buildExportScene = () => {
     const scene = new THREE.Scene();
-    const elementObjects = new Map<string, THREE.Object3D>();
+    const rootKey = '__root__';
+    const orderedElements = Object.values(elements).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const childrenByParent = new Map<string, SceneElement[]>();
 
-    Object.values(elements).forEach((element) => {
+    orderedElements.forEach((element) => {
+      const key = element.parentId ?? rootKey;
+      if (!childrenByParent.has(key)) {
+        childrenByParent.set(key, []);
+      }
+      childrenByParent.get(key)?.push(element);
+    });
+
+    const buildObjectForElement = (element: SceneElement) => {
       let object: THREE.Object3D;
       const material = new THREE.MeshStandardMaterial({
         color: element.color,
@@ -52,7 +62,10 @@ export function ProjectManager() {
           object = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.2, 16, 100), material);
           break;
         case 'mesh': {
-          if (!element.objData) return;
+          if (!element.objData) {
+            object = new THREE.Group();
+            break;
+          }
           const loader = new OBJLoader();
           object = loader.parse(element.objData);
           object.traverse((child) => {
@@ -63,26 +76,31 @@ export function ProjectManager() {
           });
           break;
         }
+        case 'group':
+        case 'subtraction':
         default:
-          object = new THREE.Object3D();
+          object = new THREE.Group();
       }
 
       object.name = element.name;
       object.position.set(...element.position);
       object.rotation.set(...element.rotation);
       object.scale.set(...element.scale);
-      elementObjects.set(element.id, object);
+
+      const childElements = childrenByParent.get(element.id) ?? [];
+      childElements.forEach((child) => {
+        object.add(buildObjectForElement(child));
+      });
+
+      return object;
+    };
+
+    const rootElements = childrenByParent.get(rootKey) ?? [];
+    rootElements.forEach((element) => {
+      scene.add(buildObjectForElement(element));
     });
 
-    elementObjects.forEach((object, id) => {
-      const element = elements[id];
-      if (element?.parentId && elementObjects.has(element.parentId)) {
-        elementObjects.get(element.parentId)?.add(object);
-      } else {
-        scene.add(object);
-      }
-    });
-
+    scene.updateMatrixWorld(true);
     return scene;
   };
 

@@ -222,12 +222,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   removeElements: (ids) => {
     set((state) => {
+      const idsToRemove = collectDescendantIds(state.elements, ids);
       const newElements = { ...state.elements };
-      ids.forEach((id) => delete newElements[id]);
+      idsToRemove.forEach((id) => delete newElements[id]);
       return {
         history: pushHistory(state),
         elements: newElements,
-        selection: state.selection.filter((selId) => !ids.includes(selId)),
+        selection: state.selection.filter((selId) => !idsToRemove.includes(selId)),
       };
     });
   },

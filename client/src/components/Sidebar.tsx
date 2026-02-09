@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useEditorStore } from '@/lib/store';
+import { useMemo, useState } from 'react';
+import { useEditorStore, type SceneElement } from '@/lib/store';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -43,8 +43,72 @@ export function Sidebar() {
   const selectedId = selection.length === 1 ? selection[0] : null;
   const selectedElement = selectedId ? elements[selectedId] : null;
 
-  // Flattened list for simplicity in Scene Graph
-  const elementList = Object.values(elements).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const { rootElements, childrenByParent } = useMemo(() => {
+    const orderedElements = Object.values(elements).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const rootKey = '__root__';
+    const map = new Map<string, SceneElement[]>();
+
+    orderedElements.forEach((element) => {
+      const key = element.parentId ?? rootKey;
+      if (!map.has(key)) {
+        map.set(key, []);
+      }
+      map.get(key)?.push(element);
+    });
+
+    return {
+      rootElements: map.get(rootKey) ?? [],
+      childrenByParent: map,
+    };
+  }, [elements]);
+
+  const renderElementRow = (el: SceneElement, depth: number) => {
+    const childElements = childrenByParent.get(el.id) ?? [];
+
+    return (
+      <div key={el.id}>
+        <div
+          className={cn(
+            "flex items-center gap-2 pr-3 py-2 rounded-md text-sm cursor-pointer transition-colors hover:bg-muted/50",
+            selection.includes(el.id) && "bg-primary/10 text-primary font-medium",
+            draggingId === el.id && "opacity-50"
+          )}
+          style={{ paddingLeft: `${12 + depth * 16}px` }}
+          onClick={() => setSelection([el.id])}
+          draggable
+          onDragStart={(event) => {
+            event.dataTransfer.setData('text/plain', el.id);
+            event.dataTransfer.effectAllowed = 'move';
+            setDraggingId(el.id);
+          }}
+          onDragEnd={() => setDraggingId(null)}
+          onDragOver={(event) => {
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'move';
+          }}
+          onDrop={(event) => {
+            event.preventDefault();
+            const activeId = event.dataTransfer.getData('text/plain');
+            if (activeId) {
+              reorderElements(activeId, el.id);
+            }
+            setDraggingId(null);
+          }}
+        >
+          <Cuboid className="w-3.5 h-3.5 opacity-70" />
+          <span className="truncate flex-1">{el.name}</span>
+          <span className="text-[10px] uppercase text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+            {el.type}
+          </span>
+        </div>
+        {childElements.length > 0 && (
+          <div className="space-y-1">
+            {childElements.map((child) => renderElementRow(child, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="w-80 border-l bg-card flex flex-col shrink-0">
@@ -57,47 +121,12 @@ export function Sidebar() {
         </div>
         <ScrollArea className="flex-1 p-2">
           <div className="space-y-1">
-            {elementList.length === 0 && (
+            {rootElements.length === 0 && (
               <p className="text-xs text-muted-foreground text-center py-8">
                 Scene is empty. Add objects from the toolbar.
               </p>
             )}
-            {elementList.map((el) => (
-              <div
-                key={el.id}
-                className={cn(
-                  "flex items-center gap-2 px-3 py-2 rounded-md text-sm cursor-pointer transition-colors hover:bg-muted/50",
-                  selection.includes(el.id) && "bg-primary/10 text-primary font-medium",
-                  draggingId === el.id && "opacity-50"
-                )}
-                onClick={() => setSelection([el.id])}
-                draggable
-                onDragStart={(event) => {
-                  event.dataTransfer.setData('text/plain', el.id);
-                  event.dataTransfer.effectAllowed = 'move';
-                  setDraggingId(el.id);
-                }}
-                onDragEnd={() => setDraggingId(null)}
-                onDragOver={(event) => {
-                  event.preventDefault();
-                  event.dataTransfer.dropEffect = 'move';
-                }}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  const activeId = event.dataTransfer.getData('text/plain');
-                  if (activeId) {
-                    reorderElements(activeId, el.id);
-                  }
-                  setDraggingId(null);
-                }}
-              >
-                <Cuboid className="w-3.5 h-3.5 opacity-70" />
-                <span className="truncate flex-1">{el.name}</span>
-                <span className="text-[10px] uppercase text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                  {el.type}
-                </span>
-              </div>
-            ))}
+            {rootElements.map((el) => renderElementRow(el, 0))}
           </div>
         </ScrollArea>
       </div>
