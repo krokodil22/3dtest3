@@ -10,12 +10,6 @@ export function Viewport() {
         <OrbitControls makeDefault />
       </Canvas>
       
-      <div className="absolute bottom-4 left-4 text-xs text-muted-foreground pointer-events-none">
-        <p>ЛКМ: выбрать</p>
-        <p>Shift + клик: мультивыбор</p>
-        <p>ПКМ: вращение</p>
-        <p>Колесо: зум</p>
-      </div>
     </div>
   );
 }
