@@ -153,7 +153,7 @@ export function Toolbar() {
       <div className="flex items-center space-x-2">
         <div className="flex items-center gap-2 mr-6">
           <img
-            src="/tetrika-logo.webp"
+            src={`${import.meta.env.BASE_URL}tetrika-logo.webp`}
             alt="Tetrika 3D logo"
             className="h-8 w-8"
           />
