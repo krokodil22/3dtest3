@@ -101,13 +101,22 @@ export function Toolbar() {
 
   const canGroup = selection.length > 1;
   const canUngroup = selection.length > 0; // Simple check
+  const subtractionPrimitiveTypes = ['box', 'sphere', 'cylinder', 'torus', 'cone', 'pyramid', 'heart', 'star'];
   const canSubtract =
     selection.length === 2 &&
-    selection.every((id) =>
-      ['box', 'sphere', 'cylinder', 'torus', 'cone', 'pyramid', 'heart', 'star'].includes(
-        elements[id]?.type
-      )
-    );
+    (() => {
+      const selectedTypes = selection.map((id) => elements[id]?.type);
+      const subtractionCount = selectedTypes.filter((type) => type === 'subtraction').length;
+      const primitiveCount = selectedTypes.filter((type) =>
+        subtractionPrimitiveTypes.includes(type ?? '')
+      ).length;
+
+      // Allow both initial subtraction (A - B) and extending an existing subtraction ((A - B) - C)
+      return (
+        (subtractionCount === 0 && primitiveCount === 2) ||
+        (subtractionCount === 1 && primitiveCount === 1)
+      );
+    })();
 
   const transformTools = [
     { mode: 'translate', icon: Move, label: 'Перемещение (G)' },
