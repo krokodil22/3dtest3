@@ -87,6 +87,7 @@ const RecursiveElement = ({ id, inheritedOpacity = 1 }: { id: string; inheritedO
   const effectiveOpacity = inheritedOpacity;
   
   const isSelected = selection.includes(id);
+  const showTransformControl = isSelected && selection.length === 1;
   const meshObject = React.useMemo(() => {
     if (!element || element.type !== 'mesh' || !element.objData) return null;
     const loader = new OBJLoader();
@@ -555,7 +556,7 @@ const RecursiveElement = ({ id, inheritedOpacity = 1 }: { id: string; inheritedO
           <Material color={baseEl.color} isSelected={isSelected} opacity={effectiveOpacity} />
         </mesh>
       </group>
-        {isSelected && (
+        {showTransformControl && (
           <TransformControls 
             mode={transformMode} 
             onMouseDown={handleTransformStart}
@@ -566,7 +567,7 @@ const RecursiveElement = ({ id, inheritedOpacity = 1 }: { id: string; inheritedO
             scale={element.scale}
           />
         )}
-        {isSelected && isTransforming && <GhostPreview />}
+        {showTransformControl && isTransforming && <GhostPreview />}
       </>
     );
   }
@@ -583,7 +584,7 @@ const RecursiveElement = ({ id, inheritedOpacity = 1 }: { id: string; inheritedO
             />
           ))}
         </group>
-        {isSelected && (
+        {showTransformControl && (
           <TransformControls 
             mode={transformMode} 
             onMouseDown={handleTransformStart}
@@ -594,7 +595,7 @@ const RecursiveElement = ({ id, inheritedOpacity = 1 }: { id: string; inheritedO
             scale={element.scale}
           />
         )}
-        {isSelected && isTransforming && <GhostPreview />}
+        {showTransformControl && isTransforming && <GhostPreview />}
       </>
     );
   }
@@ -613,7 +614,7 @@ const RecursiveElement = ({ id, inheritedOpacity = 1 }: { id: string; inheritedO
         </mesh>
       )}
 
-      {isSelected && (
+      {showTransformControl && (
         <>
           <TransformControls 
               object={undefined} 
@@ -625,7 +626,7 @@ const RecursiveElement = ({ id, inheritedOpacity = 1 }: { id: string; inheritedO
               rotation={element.rotation}
               scale={element.scale}
           />
-          {isTransforming && <GhostPreview />}
+          {showTransformControl && isTransforming && <GhostPreview />}
         </>
       )}
     </>
@@ -638,6 +639,17 @@ export const Scene = () => {
   const selection = useEditorStore(state => state.selection);
   const alignmentMode = useEditorStore(state => state.alignmentMode);
   const alignSelection = useEditorStore(state => state.alignSelection);
+  const updateElements = useEditorStore(state => state.updateElements);
+  const transformMode = useEditorStore(state => state.transformMode);
+  const multiTransformRef = React.useRef<THREE.Group>(null);
+  const [multiTransformStart, setMultiTransformStart] = React.useState<{
+    center: THREE.Vector3;
+    elements: Array<{ id: string; position: THREE.Vector3; rotation: THREE.Euler; scale: THREE.Vector3 }>;
+    pivotPosition: THREE.Vector3;
+    pivotQuaternion: THREE.Quaternion;
+    pivotScale: THREE.Vector3;
+  } | null>(null);
+  
   
   // Get only root elements (no parent) to start the recursive render
   const rootIds = Object.values(elements)
@@ -649,6 +661,82 @@ export const Scene = () => {
     if (!alignmentMode || selection.length < 2) return null;
     return getSelectionBounds(elements, selection, true);
   }, [alignmentMode, elements, selection]);
+
+  const multiSelectionCenter = React.useMemo(() => {
+    if (selection.length < 2) return null;
+    const bounds = getSelectionBounds(elements, selection, true);
+    if (!bounds) return null;
+    return new THREE.Vector3(bounds.center[0], bounds.center[1], bounds.center[2]);
+  }, [elements, selection]);
+
+  const handleMultiTransformStart = React.useCallback(() => {
+    if (!multiSelectionCenter || !multiTransformRef.current || selection.length < 2) return;
+    setMultiTransformStart({
+      center: multiSelectionCenter.clone(),
+      elements: selection
+        .map((id) => {
+          const element = elements[id];
+          if (!element) return null;
+          return {
+            id,
+            position: new THREE.Vector3(...element.position),
+            rotation: new THREE.Euler(...element.rotation),
+            scale: new THREE.Vector3(...element.scale),
+          };
+        })
+        .filter((value): value is { id: string; position: THREE.Vector3; rotation: THREE.Euler; scale: THREE.Vector3 } => Boolean(value)),
+      pivotPosition: multiTransformRef.current.position.clone(),
+      pivotQuaternion: multiTransformRef.current.quaternion.clone(),
+      pivotScale: multiTransformRef.current.scale.clone(),
+    });
+  }, [elements, multiSelectionCenter, selection]);
+
+  const handleMultiTransformEnd = React.useCallback(() => {
+    if (!multiTransformStart || !multiTransformRef.current || selection.length < 2) {
+      setMultiTransformStart(null);
+      return;
+    }
+
+    const pivot = multiTransformRef.current;
+    const updates = multiTransformStart.elements.map((entry) => {
+      const nextPosition = entry.position.clone();
+      const nextRotation = entry.rotation.clone();
+      const nextScale = entry.scale.clone();
+
+      if (transformMode === 'translate') {
+        const delta = pivot.position.clone().sub(multiTransformStart.pivotPosition);
+        nextPosition.add(delta);
+      } else if (transformMode === 'rotate') {
+        const deltaQuaternion = pivot.quaternion.clone().multiply(multiTransformStart.pivotQuaternion.clone().invert());
+        const offset = entry.position.clone().sub(multiTransformStart.center).applyQuaternion(deltaQuaternion);
+        nextPosition.copy(multiTransformStart.center).add(offset);
+        const rotationQuaternion = new THREE.Quaternion().setFromEuler(entry.rotation).premultiply(deltaQuaternion);
+        nextRotation.setFromQuaternion(rotationQuaternion);
+      } else if (transformMode === 'scale') {
+        const safeStartScale = multiTransformStart.pivotScale;
+        const ratio = new THREE.Vector3(
+          safeStartScale.x === 0 ? 1 : pivot.scale.x / safeStartScale.x,
+          safeStartScale.y === 0 ? 1 : pivot.scale.y / safeStartScale.y,
+          safeStartScale.z === 0 ? 1 : pivot.scale.z / safeStartScale.z
+        );
+        const offset = entry.position.clone().sub(multiTransformStart.center).multiply(ratio);
+        nextPosition.copy(multiTransformStart.center).add(offset);
+        nextScale.multiply(ratio);
+      }
+
+      return {
+        id: entry.id,
+        updates: {
+          position: [nextPosition.x, nextPosition.y, nextPosition.z] as [number, number, number],
+          rotation: [nextRotation.x, nextRotation.y, nextRotation.z] as [number, number, number],
+          scale: [nextScale.x, nextScale.y, nextScale.z] as [number, number, number],
+        },
+      };
+    });
+
+    updateElements(updates);
+    setMultiTransformStart(null);
+  }, [multiTransformStart, selection.length, transformMode, updateElements]);
 
   const alignmentHandles = React.useMemo(() => {
     if (!selectionBounds) return [];
@@ -705,6 +793,19 @@ export const Scene = () => {
         <planeGeometry args={[100, 100]} />
         <meshBasicMaterial visible={false} />
       </mesh>
+
+      {multiSelectionCenter && selection.length > 1 && (
+        <>
+          <group ref={multiTransformRef} position={multiSelectionCenter.toArray() as [number, number, number]} />
+          <TransformControls
+            object={multiTransformRef.current ?? undefined}
+            mode={transformMode}
+            onMouseDown={handleMultiTransformStart}
+            onMouseUp={handleMultiTransformEnd}
+            position={multiSelectionCenter.toArray() as [number, number, number]}
+          />
+        </>
+      )}
 
       {selectionBounds &&
         alignmentHandles.map((handle) => (

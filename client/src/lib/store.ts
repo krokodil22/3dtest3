@@ -74,6 +74,7 @@ interface EditorState {
   addElement: (type: ElementType) => void;
   addObjElement: (name: string, objData: string) => void;
   updateElement: (id: string, updates: Partial<SceneElement>) => void;
+  updateElements: (updates: Array<{ id: string; updates: Partial<SceneElement> }>) => void;
   removeElements: (ids: string[]) => void;
   setSelection: (ids: string[]) => void;
   clearSelection: () => void;
@@ -469,6 +470,24 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         [id]: { ...state.elements[id], ...updates },
       },
     }));
+  },
+
+  updateElements: (updates) => {
+    if (updates.length === 0) return;
+    set((state) => {
+      const nextElements = { ...state.elements };
+      updates.forEach(({ id, updates: elementUpdates }) => {
+        const element = nextElements[id];
+        if (!element) return;
+        nextElements[id] = { ...element, ...elementUpdates };
+      });
+
+      return {
+        history: pushHistory(state),
+        redoHistory: [],
+        elements: nextElements,
+      };
+    });
   },
 
   removeElements: (ids) => {
