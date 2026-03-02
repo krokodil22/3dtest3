@@ -74,7 +74,15 @@ const ElementRenderer = ({ id }: { id: string }) => {
 };
 
 // Recursive component to handle hierarchy
-const RecursiveElement = ({ id, inheritedOpacity = 1 }: { id: string; inheritedOpacity?: number }) => {
+const RecursiveElement = ({
+  id,
+  inheritedOpacity = 1,
+  selectionLockRef,
+}: {
+  id: string;
+  inheritedOpacity?: number;
+  selectionLockRef?: React.MutableRefObject<boolean>;
+}) => {
   const element = useEditorStore(state => state.elements[id]);
   const selection = useEditorStore(state => state.selection);
   const transformMode = useEditorStore(state => state.transformMode);
@@ -85,6 +93,8 @@ const RecursiveElement = ({ id, inheritedOpacity = 1 }: { id: string; inheritedO
   const ghostRef = useRef<THREE.Group>(null!);
   const ghostOpacity = 0.4;
   const effectiveOpacity = inheritedOpacity;
+  const localSelectionLockRef = React.useRef(false);
+  const activeSelectionLockRef = selectionLockRef ?? localSelectionLockRef;
   
   const isSelected = selection.includes(id);
   const showTransformControl = isSelected && selection.length === 1;
@@ -275,6 +285,7 @@ const RecursiveElement = ({ id, inheritedOpacity = 1 }: { id: string; inheritedO
 
   const handleClick = (e: any) => {
     e.stopPropagation();
+    if (activeSelectionLockRef.current || (typeof e?.delta === 'number' && e.delta > 2)) return;
     let targetId = id;
     let current = element;
     while (current?.parentId) {
@@ -301,6 +312,7 @@ const RecursiveElement = ({ id, inheritedOpacity = 1 }: { id: string; inheritedO
   };
 
   const handleTransformStart = () => {
+    activeSelectionLockRef.current = true;
     setIsTransforming(true);
   };
 
@@ -326,6 +338,9 @@ const RecursiveElement = ({ id, inheritedOpacity = 1 }: { id: string; inheritedO
        position: [obj.position.x - offset.x, obj.position.y - offset.y, obj.position.z - offset.z],
        rotation: [obj.rotation.x, obj.rotation.y, obj.rotation.z],
        scale: [obj.scale.x, obj.scale.y, obj.scale.z],
+     });
+     requestAnimationFrame(() => {
+       activeSelectionLockRef.current = false;
      });
   };
 
@@ -581,6 +596,7 @@ const RecursiveElement = ({ id, inheritedOpacity = 1 }: { id: string; inheritedO
               key={childId}
               id={childId}
               inheritedOpacity={isTransforming ? Math.min(effectiveOpacity, 0.6) : effectiveOpacity}
+              selectionLockRef={selectionLockRef}
             />
           ))}
         </group>
@@ -633,7 +649,7 @@ const RecursiveElement = ({ id, inheritedOpacity = 1 }: { id: string; inheritedO
   );
 };
 
-export const Scene = () => {
+export const Scene = ({ selectionLockRef }: { selectionLockRef: React.MutableRefObject<boolean> }) => {
   const elements = useEditorStore(state => state.elements);
   const setSelection = useEditorStore(state => state.setSelection);
   const selection = useEditorStore(state => state.selection);
@@ -788,7 +804,11 @@ export const Scene = () => {
       <mesh 
         rotation={[-Math.PI / 2, 0, 0]} 
         position={[0, -0.01, 0]} 
-        onClick={(e) => { e.stopPropagation(); setSelection([]); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (selectionLockRef.current || (typeof e?.delta === 'number' && e.delta > 2)) return;
+          setSelection([]);
+        }}
       >
         <planeGeometry args={[100, 100]} />
         <meshBasicMaterial visible={false} />
@@ -824,7 +844,7 @@ export const Scene = () => {
         ))}
 
       {rootIds.map(id => (
-        <RecursiveElement key={id} id={id} />
+        <RecursiveElement key={id} id={id} selectionLockRef={selectionLockRef} />
       ))}
     </>
   );
