@@ -103,6 +103,19 @@ const DEFAULT_ELEMENT_PROPS = {
 };
 
 const MAX_HISTORY = 50;
+const SUBTRACTION_PRIMITIVE_TYPES: ElementType[] = [
+  'box',
+  'sphere',
+  'cylinder',
+  'torus',
+  'cone',
+  'pyramid',
+  'heart',
+  'star',
+];
+
+const isSubtractionPrimitive = (element?: SceneElement) =>
+  !!element && SUBTRACTION_PRIMITIVE_TYPES.includes(element.type);
 
 const cloneElements = (elements: Record<string, SceneElement>) =>
   Object.fromEntries(
@@ -660,11 +673,58 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const state = get();
     // Needs exactly 2 meshes
     if (state.selection.length !== 2) return;
-    const canSubtract = state.selection.every((id) =>
-      ['box', 'sphere', 'cylinder', 'torus', 'cone', 'pyramid', 'heart', 'star'].includes(
-        state.elements[id]?.type
-      )
-    );
+    const [firstId, secondId] = state.selection;
+    const firstElement = state.elements[firstId];
+    const secondElement = state.elements[secondId];
+
+    const existingSubtractionId = firstElement?.type === 'subtraction'
+      ? firstId
+      : secondElement?.type === 'subtraction'
+        ? secondId
+        : null;
+    const cutterId = existingSubtractionId === firstId ? secondId : firstId;
+    const cutterElement = state.elements[cutterId];
+
+    if (existingSubtractionId && isSubtractionPrimitive(cutterElement)) {
+      const subtractionElement = state.elements[existingSubtractionId];
+      if (!subtractionElement) return;
+      const subtractionWorld = getWorldTransform(state.elements, subtractionElement);
+      const cutterWorld = getWorldTransform(state.elements, cutterElement);
+
+      set((state) => {
+        const updatedElements = { ...state.elements };
+        const currentSubtraction = updatedElements[existingSubtractionId];
+        const currentCutter = updatedElements[cutterId];
+        if (!currentSubtraction || !currentCutter) return state;
+
+        updatedElements[existingSubtractionId] = {
+          ...currentSubtraction,
+          children: [...(currentSubtraction.children ?? []), cutterId],
+        };
+
+        updatedElements[cutterId] = {
+          ...currentCutter,
+          parentId: existingSubtractionId,
+          position: [
+            cutterWorld.position[0] - subtractionWorld.position[0],
+            cutterWorld.position[1] - subtractionWorld.position[1],
+            cutterWorld.position[2] - subtractionWorld.position[2],
+          ],
+          rotation: cutterWorld.rotation,
+          scale: cutterWorld.scale,
+        };
+
+        return {
+          history: pushHistory(state),
+          redoHistory: [],
+          elements: updatedElements,
+          selection: [existingSubtractionId],
+        };
+      });
+      return;
+    }
+
+    const canSubtract = [firstElement, secondElement].every((element) => isSubtractionPrimitive(element));
     if (!canSubtract) return;
     
     const orderedSelection = [...state.selection].sort((a, b) => {

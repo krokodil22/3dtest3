@@ -508,17 +508,25 @@ const RecursiveElement = ({
         <mesh>
           {element.type === 'subtraction' ? (
             <Geometry>
-              {childIds.length === 2 && (() => {
+              {childIds.length >= 2 && (() => {
                 const baseEl = allElements[childIds[0]];
-                const subEl = allElements[childIds[1]];
+                const subtractionEls = childIds.slice(1).map((subtractionId) => allElements[subtractionId]);
+                if (!baseEl || subtractionEls.some((el) => !el)) return null;
                 return (
                   <>
                     <Base position={baseEl.position} rotation={baseEl.rotation} scale={baseEl.scale}>
                       {renderGeometry(baseEl)}
                     </Base>
-                    <Subtraction position={subEl.position} rotation={subEl.rotation} scale={subEl.scale}>
-                      {renderGeometry(subEl)}
-                    </Subtraction>
+                    {subtractionEls.map((subEl) => (
+                      <Subtraction
+                        key={subEl.id}
+                        position={subEl.position}
+                        rotation={subEl.rotation}
+                        scale={subEl.scale}
+                      >
+                        {renderGeometry(subEl)}
+                      </Subtraction>
+                    ))}
                   </>
                 );
               })()}
@@ -542,11 +550,11 @@ const RecursiveElement = ({
   );
 
   if (element.type === 'subtraction') {
-    // Expect exactly 2 children for subtraction for now
-    if (childIds.length !== 2) return null;
-    const [baseId, subId] = childIds;
+    if (childIds.length < 2) return null;
+    const [baseId, ...subtractionIds] = childIds;
     const baseEl = allElements[baseId];
-    const subEl = allElements[subId];
+    const subtractionEls = subtractionIds.map((subtractionId) => allElements[subtractionId]);
+    if (!baseEl || subtractionEls.some((el) => !el)) return null;
 
     return (
       <>
@@ -560,13 +568,16 @@ const RecursiveElement = ({
               >
                 {renderGeometry(baseEl)}
               </Base>
-              <Subtraction 
-                position={subEl.position} 
-                rotation={subEl.rotation} 
-                scale={subEl.scale}
-              >
-                {renderGeometry(subEl)}
-              </Subtraction>
+              {subtractionEls.map((subEl) => (
+                <Subtraction 
+                  key={subEl.id}
+                  position={subEl.position} 
+                  rotation={subEl.rotation} 
+                  scale={subEl.scale}
+                >
+                  {renderGeometry(subEl)}
+                </Subtraction>
+              ))}
             </Geometry>
           <Material color={baseEl.color} isSelected={isSelected} opacity={effectiveOpacity} />
         </mesh>
