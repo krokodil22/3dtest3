@@ -5,7 +5,7 @@ import {
   buildProjectExport,
   createStoredProject,
   getStoredProjects,
-  importProjectExport,
+  mergeProjectElements,
   parseProjectExport,
   removeStoredProject,
   updateStoredProject,
@@ -379,14 +379,16 @@ export function ProjectManager() {
       if (filename.endsWith('.json')) {
         try {
           const parsed = parseProjectExport(text);
-          const project = importProjectExport(parsed);
+          const mergedElements = mergeProjectElements(elementsRef.current, parsed.elements);
+          loadScene(mergedElements);
+          if (activeProjectIdRef.current) {
+            updateStoredProject(activeProjectIdRef.current, mergedElements);
+          }
           setProjects(getStoredProjects());
-          setActiveProjectId(project.id);
-          loadScene(project.elements);
-          setAutoSaveEnabled(Object.keys(project.elements).length > 0);
+          setAutoSaveEnabled(Object.keys(mergedElements).length > 0);
           toast({
-            title: 'Проект импортирован',
-            description: 'Данные загружены и сохранены в кэше браузера.',
+            title: 'Проект объединен',
+            description: 'Объекты из JSON добавлены в текущий проект.',
           });
         } catch (error) {
           const message =
