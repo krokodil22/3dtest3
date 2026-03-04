@@ -165,3 +165,36 @@ export const importProjectExport = (exported: ProjectExport): StoredProject => {
   writeProjects([...projects, project]);
   return project;
 };
+
+export const mergeProjectElements = (
+  currentElements: Record<string, SceneElement>,
+  importedElements: Record<string, SceneElement>
+): Record<string, SceneElement> => {
+  const merged = { ...currentElements };
+  const idMap = new Map<string, string>();
+  const nextOrderStart =
+    Object.values(currentElements).reduce((max, element) => Math.max(max, element.order ?? -1), -1) + 1;
+
+  Object.keys(importedElements).forEach((id) => {
+    idMap.set(id, uuidv4());
+  });
+
+  const importedEntries = Object.values(importedElements)
+    .slice()
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+  importedEntries.forEach((element, index) => {
+    const nextId = idMap.get(element.id);
+    if (!nextId) return;
+
+    merged[nextId] = {
+      ...element,
+      id: nextId,
+      order: nextOrderStart + index,
+      parentId: element.parentId ? idMap.get(element.parentId) : undefined,
+      children: element.children?.map((childId) => idMap.get(childId)).filter((childId): childId is string => !!childId),
+    };
+  });
+
+  return merged;
+};
