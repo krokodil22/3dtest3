@@ -342,13 +342,16 @@ const buildClonedElements = (
     const [x, y, z] = element.position;
     const newId = idMap.get(element.id) ?? uuidv4();
     const newParentId = element.parentId ? idMap.get(element.parentId) : undefined;
+    const clonedPosition: [number, number, number] = newParentId
+      ? [x, y, z]
+      : [x + offset[0], y + offset[1], z + offset[2]];
     return {
       ...cloneElement(element),
       id: newId,
       order: currentOrder++,
       parentId: newParentId,
       children: element.children?.map((childId) => idMap.get(childId) ?? childId),
-      position: [x + offset[0], y + offset[1], z + offset[2]],
+      position: clonedPosition,
     };
   });
 
