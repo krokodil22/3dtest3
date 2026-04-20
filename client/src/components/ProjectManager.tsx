@@ -289,15 +289,15 @@ export function ProjectManager() {
           }
           break;
         case 'sphere':
-          object = new THREE.Mesh(new THREE.SphereGeometry(0.5, 32, 32), material);
+          object = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 32), material);
           break;
         case 'cylinder':
-          object = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 1, 32), material);
+          object = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 32), material);
           break;
         case 'torus':
           object = new THREE.Mesh(
             new THREE.TorusGeometry(
-              0.5,
+              1,
               Math.max(0.05, Math.min(element.torusThickness ?? 0.3, 0.95)),
               16,
               100
@@ -306,10 +306,10 @@ export function ProjectManager() {
           );
           break;
         case 'cone':
-          object = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.4, 32), material);
+          object = new THREE.Mesh(new THREE.ConeGeometry(1, 1.4, 32), material);
           break;
         case 'pyramid':
-          object = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.4, 4), material);
+          object = new THREE.Mesh(new THREE.ConeGeometry(1, 1.4, 4), material);
           break;
         case 'heart':
           object = new THREE.Mesh(createExtrudedGeometry(createHeartShape()), material);
