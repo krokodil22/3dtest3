@@ -28,6 +28,8 @@ import * as THREE from 'three';
 import { OBJExporter } from 'three/examples/jsm/exporters/OBJExporter.js';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { Brush, Evaluator, SUBTRACTION } from 'three-bvh-csg';
 
 const formatRelativeTime = (timestamp: string, now: Date) => {
   const updatedAt = new Date(timestamp);
@@ -95,6 +97,74 @@ const createExtrudedGeometry = (shape: THREE.Shape, scale = 0.5) => {
   geometry.center();
   geometry.scale(scale, scale, scale);
   return geometry;
+};
+
+const toVertexColor = (value: THREE.ColorRepresentation) => {
+  const color = new THREE.Color(value);
+  const srgb = color.convertLinearToSRGB();
+  return `${srgb.r} ${srgb.g} ${srgb.b}`;
+};
+
+const exportSceneToObjWithVertexColors = (scene: THREE.Object3D) => {
+  scene.updateMatrixWorld(true);
+  let output = '';
+  let vertexOffset = 0;
+  let normalOffset = 0;
+
+  scene.traverse((child) => {
+    if (!(child as THREE.Mesh).isMesh) return;
+    const mesh = child as THREE.Mesh;
+    const sourceGeometry = mesh.geometry;
+    if (!sourceGeometry) return;
+
+    const geometry = sourceGeometry.clone();
+    geometry.applyMatrix4(mesh.matrixWorld);
+    if (!geometry.getAttribute('normal')) {
+      geometry.computeVertexNormals();
+    }
+
+    const position = geometry.getAttribute('position');
+    const normal = geometry.getAttribute('normal');
+    if (!position || !normal) return;
+
+    output += `o ${mesh.name || 'mesh'}\n`;
+    const color = toVertexColor((mesh.material as THREE.MeshStandardMaterial)?.color ?? '#ffffff');
+    for (let i = 0; i < position.count; i += 1) {
+      output += `v ${position.getX(i)} ${position.getY(i)} ${position.getZ(i)} ${color}\n`;
+    }
+
+    for (let i = 0; i < normal.count; i += 1) {
+      output += `vn ${normal.getX(i)} ${normal.getY(i)} ${normal.getZ(i)}\n`;
+    }
+
+    const index = geometry.getIndex();
+    if (index) {
+      for (let i = 0; i < index.count; i += 3) {
+        const a = index.getX(i) + vertexOffset + 1;
+        const b = index.getX(i + 1) + vertexOffset + 1;
+        const c = index.getX(i + 2) + vertexOffset + 1;
+        const na = index.getX(i) + normalOffset + 1;
+        const nb = index.getX(i + 1) + normalOffset + 1;
+        const nc = index.getX(i + 2) + normalOffset + 1;
+        output += `f ${a}//${na} ${b}//${nb} ${c}//${nc}\n`;
+      }
+    } else {
+      for (let i = 0; i < position.count; i += 3) {
+        const a = vertexOffset + i + 1;
+        const b = vertexOffset + i + 2;
+        const c = vertexOffset + i + 3;
+        const na = normalOffset + i + 1;
+        const nb = normalOffset + i + 2;
+        const nc = normalOffset + i + 3;
+        output += `f ${a}//${na} ${b}//${nb} ${c}//${nc}\n`;
+      }
+    }
+
+    vertexOffset += position.count;
+    normalOffset += normal.count;
+  });
+
+  return output;
 };
 
 export function ProjectManager() {
@@ -173,6 +243,7 @@ export function ProjectManager() {
 
   const buildExportScene = () => {
     const scene = new THREE.Scene();
+    const evaluator = new Evaluator();
     const rootKey = '__root__';
     const orderedElements = Object.values(elements).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     const childrenByParent = new Map<string, SceneElement[]>();
@@ -184,6 +255,21 @@ export function ProjectManager() {
       }
       childrenByParent.get(key)?.push(element);
     });
+
+    const extractMergedGeometry = (object: THREE.Object3D) => {
+      object.updateMatrixWorld(true);
+      const geometries: THREE.BufferGeometry[] = [];
+      object.traverse((child) => {
+        if (!(child as THREE.Mesh).isMesh) return;
+        const mesh = child as THREE.Mesh;
+        if (!mesh.geometry) return;
+        const geometry = mesh.geometry.clone();
+        geometry.applyMatrix4(mesh.matrixWorld);
+        geometries.push(geometry.toNonIndexed() ?? geometry);
+      });
+      if (geometries.length === 0) return null;
+      return mergeGeometries(geometries, false);
+    };
 
     const buildObjectForElement = (element: SceneElement) => {
       let object: THREE.Object3D;
@@ -246,8 +332,41 @@ export function ProjectManager() {
           });
           break;
         }
+        case 'subtraction': {
+          const operands = childrenByParent.get(element.id) ?? [];
+          const [baseOperand, ...subtractOperands] = operands;
+          if (!baseOperand || subtractOperands.length === 0) {
+            object = new THREE.Group();
+            break;
+          }
+
+          const baseObject = buildObjectForElement(baseOperand);
+          baseObject.position.set(...baseOperand.position);
+          baseObject.rotation.set(...baseOperand.rotation);
+          baseObject.scale.set(...baseOperand.scale);
+          const baseGeometry = extractMergedGeometry(baseObject);
+          if (!baseGeometry) {
+            object = new THREE.Group();
+            break;
+          }
+
+          let resultBrush = new Brush(baseGeometry, material);
+          subtractOperands.forEach((operand) => {
+            const subtractionObject = buildObjectForElement(operand);
+            subtractionObject.position.set(...operand.position);
+            subtractionObject.rotation.set(...operand.rotation);
+            subtractionObject.scale.set(...operand.scale);
+            const subtractionGeometry = extractMergedGeometry(subtractionObject);
+            if (!subtractionGeometry) return;
+            const subtractionBrush = new Brush(subtractionGeometry, material);
+            resultBrush = evaluator.evaluate(resultBrush, subtractionBrush, SUBTRACTION) as Brush;
+          });
+
+          resultBrush.geometry.computeVertexNormals();
+          object = new THREE.Mesh(resultBrush.geometry, material);
+          break;
+        }
         case 'group':
-        case 'subtraction':
         default:
           object = new THREE.Group();
       }
@@ -351,9 +470,11 @@ export function ProjectManager() {
   };
 
   const handleExportObj = () => {
-    const exporter = new OBJExporter();
     const scene = buildExportScene();
-    const objText = exporter.parse(scene);
+    const exporter = new OBJExporter();
+    const standardObj = exporter.parse(scene);
+    const coloredObj = exportSceneToObjWithVertexColors(scene);
+    const objText = coloredObj.trim().length > 0 ? coloredObj : standardObj;
     const blob = new Blob([objText], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
