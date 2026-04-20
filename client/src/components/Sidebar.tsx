@@ -8,6 +8,9 @@ import { ChevronDown, ChevronRight, Cuboid, Layers, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
+const radToDeg = (radians: number) => (radians * 180) / Math.PI;
+const degToRad = (degrees: number) => (degrees * Math.PI) / 180;
+
 function PropertyInput({ 
   label, 
   value, 
@@ -233,30 +236,30 @@ export function Sidebar() {
               </div>
 
               <div className="space-y-3">
-                <Label className="text-xs uppercase text-muted-foreground">Поворот</Label>
+                <Label className="text-xs uppercase text-muted-foreground">Поворот (°)</Label>
                 <div className="grid grid-cols-3 gap-2">
                   <PropertyInput 
                     label="X" 
-                    value={selectedElement.rotation[0]} 
+                    value={radToDeg(selectedElement.rotation[0])} 
                     onChange={(v) => {
                       const [, y, z] = selectedElement.rotation;
-                      updateElement(selectedElement.id, { rotation: [v, y, z] });
+                      updateElement(selectedElement.id, { rotation: [degToRad(v), y, z] });
                     }} 
                   />
                   <PropertyInput 
                     label="Y" 
-                    value={selectedElement.rotation[1]} 
+                    value={radToDeg(selectedElement.rotation[1])} 
                     onChange={(v) => {
                       const [x, , z] = selectedElement.rotation;
-                      updateElement(selectedElement.id, { rotation: [x, v, z] });
+                      updateElement(selectedElement.id, { rotation: [x, degToRad(v), z] });
                     }} 
                   />
                   <PropertyInput 
                     label="Z" 
-                    value={selectedElement.rotation[2]} 
+                    value={radToDeg(selectedElement.rotation[2])} 
                     onChange={(v) => {
                       const [x, y, ] = selectedElement.rotation;
-                      updateElement(selectedElement.id, { rotation: [x, y, v] });
+                      updateElement(selectedElement.id, { rotation: [x, y, degToRad(v)] });
                     }} 
                   />
                 </div>
