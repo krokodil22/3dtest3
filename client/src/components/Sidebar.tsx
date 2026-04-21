@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ELEMENT_LABELS, useEditorStore, type SceneElement } from '@/lib/store';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
@@ -43,6 +43,32 @@ export function Sidebar() {
   const reorderElements = useEditorStore(state => state.reorderElements);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set());
+  const knownElementIdsRef = useRef<Set<string>>(new Set(Object.keys(elements)));
+
+  useEffect(() => {
+    const knownElementIds = knownElementIdsRef.current;
+    const nextKnownElementIds = new Set(knownElementIds);
+    const newGroupIds: string[] = [];
+
+    Object.values(elements).forEach((element) => {
+      if (!knownElementIds.has(element.id)) {
+        nextKnownElementIds.add(element.id);
+        if (element.type === 'group') {
+          newGroupIds.push(element.id);
+        }
+      }
+    });
+
+    if (newGroupIds.length > 0) {
+      setCollapsedIds((prev) => {
+        const next = new Set(prev);
+        newGroupIds.forEach((id) => next.add(id));
+        return next;
+      });
+    }
+
+    knownElementIdsRef.current = nextKnownElementIds;
+  }, [elements]);
 
   const selectedId = selection.length === 1 ? selection[0] : null;
   const selectedElement = selectedId ? elements[selectedId] : null;
